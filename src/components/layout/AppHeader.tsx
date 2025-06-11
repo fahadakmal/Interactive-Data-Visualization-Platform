@@ -41,6 +41,10 @@ const AppHeader: React.FC = () => {
           
           <Tooltip title="GitHub">
             <IconButton
+              component="a"
+              href="https://github.com/fahadakmal/Interactive-Data-Visualization-Platform"
+              target="_blank"
+              rel="noopener noreferrer"
               color="inherit"
               aria-label="github"
               edge="end"

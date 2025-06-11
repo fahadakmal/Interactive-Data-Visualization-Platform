@@ -1,5 +1,7 @@
 # Interactive Data Visualization Platform
 
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Interactive%20Data%20Viz-blue)](https://interactive-data-visualization-plat.vercel.app/)
+
 ## The Future of Data Exploration is Here
 
 **Interactive Data Visualization Platform** is not just another data visualization tool; it's a paradigm shift. Engineered for the modern data scientist, analyst, and enthusiast, The Platform transforms raw CSV data into breathtaking, insightful, and fully interactive line and scatter plots with unparalleled ease and speed. Forget clunky interfaces and limited customization—The Platform delivers a seamless, powerful, and intuitive experience that empowers you to truly *see* your data.
