@@ -14,6 +14,10 @@ interface VisualizationContextType {
   files: CSVFile[];
   chartData: ChartData | null;
   chartOptions: ChartOptions;
+  chartDisplayMode: 'single' | 'separate' | 'hybrid';
+  setChartDisplayMode: (mode: 'single' | 'separate' | 'hybrid') => void;
+  isSingleChartCompatible: boolean;
+  getHybridChartGroups: () => { combined: CSVFile[]; separate: CSVFile[] };
   addFile: (file: File) => Promise<void>;
   removeFile: (id: string) => void;
   updateAxisSelection: (fileId: string, xAxis: string, yAxes: string[]) => void;
@@ -62,6 +66,7 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
   const [files, setFiles] = useState<CSVFile[]>([]);
   const [chartData, setChartData] = useState<ChartData | null>(null);
   const [chartOptions, setChartOptions] = useState<ChartOptions>(DEFAULT_CHART_OPTIONS);
+  const [chartDisplayMode, setChartDisplayMode] = useState<'single' | 'separate' | 'hybrid'>('separate');
   
   // Load data from localStorage on application startup
   useEffect(() => {
@@ -74,6 +79,13 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
       generateChart();
     }
   }, [files]);
+  
+  // Always regenerate chart data when chartDisplayMode changes
+  useEffect(() => {
+    if (files.length > 0) {
+      generateChart();
+    }
+  }, [chartDisplayMode]);
   
   const addFile = async (file: File) => {
     try {
@@ -289,24 +301,77 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
     });
   };
   
+  // Helper function to combine datasets with the same column names
+  const combineDatasetsByColumnName = (datasets: ChartData['datasets']): ChartData['datasets'] => {
+    // Debug: print all dataset axis names and types
+    datasets.forEach(ds => {
+      console.log('Dataset:', {
+        xAxisName: ds.xAxisName,
+        yAxisName: ds.yAxisName,
+        fileName: ds.fileName,
+        xType: typeof ds.data[0]?.x
+      });
+    });
+    // Group datasets by trimmed/lowercased xAxisName and xAxis type
+    const xAxisGroups = new Map<string, ChartData['datasets']>();
+    datasets.forEach(ds => {
+      const xName = (ds.xAxisName || '').toString().trim().toLowerCase();
+      const xType = typeof ds.data[0]?.x;
+      const key = `${xName}||${xType}`;
+      if (!xAxisGroups.has(key)) xAxisGroups.set(key, []);
+      xAxisGroups.get(key)!.push(ds);
+    });
+    const mergedDatasets: ChartData['datasets'] = [];
+    xAxisGroups.forEach((group, groupKey) => {
+      // Find all unique yAxisNames in this group (trimmed/lowercased)
+      const yNames = Array.from(new Set(group.map(ds => (ds.yAxisName || '').toString().trim().toLowerCase())));
+      yNames.forEach(yName => {
+        // Merge all datasets in this group with this yAxisName
+        const toMerge = group.filter(ds => (ds.yAxisName || '').toString().trim().toLowerCase() === yName);
+        if (toMerge.length === 0) return;
+        // Merge data points
+        let mergedData: { x: number, y: number }[] = [];
+        toMerge.forEach(ds => {
+          mergedData = mergedData.concat(ds.data);
+        });
+        mergedData.sort((a, b) => a.x - b.x);
+        // Use style from the first dataset with this yName
+        const style = toMerge[0].style;
+        // Use isDateXAxis/isDateYAxis from the first dataset
+        const { isDateXAxis, isDateYAxis } = toMerge[0];
+        // Merge fileIds and fileNames for debug/legend if needed
+        const fileIds = toMerge.map(ds => ds.fileId);
+        const fileNames = toMerge.map(ds => ds.fileName);
+        // Sanitize id for CSS selector compatibility
+        const safeId = `combined-${groupKey}-${yName}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+        console.log('Merging group key:', groupKey, 'Y:', yName, 'fileNames:', fileNames);
+        mergedDatasets.push({
+          id: safeId,
+          fileId: fileIds.join(','),
+          fileName: fileNames.join(', '),
+          label: yName,
+          xAxisName: toMerge[0].xAxisName,
+          yAxisName: yName,
+          data: mergedData,
+          style,
+          isDateXAxis,
+          isDateYAxis,
+        });
+      });
+    });
+    return mergedDatasets;
+  };
+  
   const generateChart = () => {
-    // Verify that we have files with selected axes
     if (files.length === 0) {
       setChartData(null);
       return;
     }
-    
     const datasets: ChartData['datasets'] = [];
-    
     files.forEach(file => {
       const { selected, data, columnStyles } = file;
-      
-      if (!selected.xAxis || selected.yAxes.length === 0) {
-        return; // Skip files without proper axis selection
-      }
-
+      if (!selected.xAxis || selected.yAxes.length === 0) return;
       let isDateXAxis = false;
-      // Determine if the x-axis column contains Date objects
       for (let row of data) {
         const value = row[selected.xAxis];
         if (value instanceof Date) {
@@ -314,10 +379,8 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
           break;
         }
       }
-      
       selected.yAxes.forEach(yAxis => {
         let isDateYAxis = false;
-        // Determine if the y-axis column contains Date objects
         for (let row of data) {
           const value = row[yAxis];
           if (value instanceof Date) {
@@ -325,22 +388,18 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
             break;
           }
         }
-        // Filter out missing/invalid data
         const points = data
           .filter(row => {
             const xVal = row[selected.xAxis];
             const yVal = row[yAxis];
-            // Treat empty, undefined, or 'NaN' as missing for strings/numbers
             if (typeof xVal === 'string' && (xVal === '' || xVal === 'NaN')) return false;
             if (typeof yVal === 'string' && (yVal === '' || yVal === 'NaN')) return false;
             if (xVal === undefined || xVal === null || yVal === undefined || yVal === null) return false;
-
             return true;
           })
           .map(row => {
             const xValue = row[selected.xAxis];
             const yValue = row[yAxis];
-            
             return {
               x: xValue instanceof Date ? xValue.getTime() : (xValue as number),
               y: yValue instanceof Date ? yValue.getTime() : (yValue as number),
@@ -348,7 +407,6 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
           })
           .filter(point => !isNaN(point.x) && !isNaN(point.y))
           .sort((a, b) => a.x - b.x);
-        // Outlier detection for y
         let warning = undefined;
         if (points.length > 1 && !isDateYAxis) {
           const yVals = points.map(p => p.y);
@@ -359,7 +417,7 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
           }
         }
         if (points.length > 0) {
-          datasets.push({
+          const dataset = {
             id: `${file.id}-${yAxis}`,
             fileId: file.id,
             fileName: file.name,
@@ -368,7 +426,7 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
             yAxisName: yAxis,
             data: points,
             style: columnStyles[yAxis] || {
-              color: getRandomColor(),
+              color: '#8884d8',
               lineStyle: 'solid',
               pointStyle: 'circle',
               showPoints: true,
@@ -377,14 +435,25 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
             isDateXAxis,
             isDateYAxis,
             warning,
-          });
+          };
+          datasets.push(dataset);
         }
       });
     });
-    
     if (datasets.length > 0) {
+      let finalDatasets = datasets;
+      if (chartDisplayMode === 'single') {
+        finalDatasets = combineDatasetsByColumnName(datasets);
+      } else if (chartDisplayMode === 'hybrid') {
+        const { combined } = getHybridChartGroups();
+        const combinedFileIds = combined.map(f => f.id);
+        const combinedDatasets = datasets.filter(ds => combinedFileIds.includes(ds.fileId));
+        const separateDatasets = datasets.filter(ds => !combinedFileIds.includes(ds.fileId));
+        const mergedCombinedDatasets = combineDatasetsByColumnName(combinedDatasets);
+        finalDatasets = [...mergedCombinedDatasets, ...separateDatasets];
+      }
       setChartData({
-        datasets,
+        datasets: finalDatasets,
       });
     } else {
       setChartData(null);
@@ -556,10 +625,59 @@ const getRandomColor = () => {
     }
   };
   
+  // Compatibility check for single chart
+  const isSingleChartCompatible = React.useMemo(() => {
+    if (files.length < 2) return true;
+    const firstFile = files[0];
+    const xAxisName = firstFile.selected?.xAxis;
+    if (!xAxisName) return false;
+    const xType = typeof (firstFile.data?.[0]?.[xAxisName]);
+    for (let file of files) {
+      if (file.selected?.xAxis !== xAxisName) return false;
+      const thisType = typeof (file.data?.[0]?.[xAxisName]);
+      if (thisType !== xType) return false;
+    }
+    return true;
+  }, [files]);
+  
+  // Hybrid grouping: find largest compatible group, rest are separate
+  const getHybridChartGroups = React.useCallback(() => {
+    if (files.length < 2) return { combined: files, separate: [] };
+    // Group by xAxis name/type and numeric Y axes
+    const groups: { [key: string]: CSVFile[] } = {};
+    files.forEach(file => {
+      let xAxisName = file.selected?.xAxis;
+      if (typeof xAxisName === 'string') xAxisName = xAxisName.trim();
+      const xType = typeof (file.data?.[0]?.[xAxisName]);
+      let compatible = true;
+      for (let y of file.selected?.yAxes || []) {
+        if (!file.data?.every((row: any) => typeof row[y] === 'number' || row[y] === null || row[y] === undefined)) {
+          compatible = false;
+        }
+      }
+      if (xAxisName && compatible) {
+        const key = `${xAxisName}|${xType}`;
+        console.log('Grouping key:', key, 'for file:', file.name);
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(file);
+      }
+    });
+    // Find the largest group
+    let largestGroup: CSVFile[] = [];
+    Object.values(groups).forEach(g => { if (g.length > largestGroup.length) largestGroup = g; });
+    const combined = largestGroup;
+    const separate = files.filter(f => !combined.includes(f));
+    return { combined, separate };
+  }, [files]);
+  
   const value = {
     files,
     chartData,
     chartOptions,
+    chartDisplayMode,
+    setChartDisplayMode,
+    isSingleChartCompatible,
+    getHybridChartGroups,
     addFile,
     removeFile,
     updateAxisSelection,
