@@ -28,6 +28,9 @@ interface VisualizationContextType {
   updateFileChartConfig: (fileId: string, config: Partial<ChartOptions>) => void;
   updateShowPoints: (fileId: string, column: string, showPoints: boolean) => void;
   updateShowLine: (fileId: string, column: string, showLine: boolean) => void;
+  saveFilesToLocalStorage: (newFiles: CSVFile[]) => void;
+  saveChartOptionsToLocalStorage: (newOptions: ChartOptions) => void;
+  loadFilesFromLocalStorage: () => void;
 }
 
 const DEFAULT_CHART_OPTIONS: ChartOptions = {
@@ -60,52 +63,17 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
   const [chartData, setChartData] = useState<ChartData | null>(null);
   const [chartOptions, setChartOptions] = useState<ChartOptions>(DEFAULT_CHART_OPTIONS);
   
-  // Load data from localStorage on component mount
+  // Load data from localStorage on application startup
   useEffect(() => {
-    const savedFiles = localStorage.getItem('csvFiles');
-    const savedOptions = localStorage.getItem('chartOptions');
-    
-    if (savedFiles) {
-      try {
-        const filesMetadata = JSON.parse(savedFiles);
-        setFiles(filesMetadata.map((file: any) => ({
-          ...file,
-          data: [], // Initialize with empty data array
-        })));
-      } catch (error) {
-        console.error('Error loading saved files:', error);
-      }
-    }
-    
-    if (savedOptions) {
-      try {
-        setChartOptions(JSON.parse(savedOptions));
-      } catch (error) {
-        console.error('Error loading saved options:', error);
-      }
-    }
+    loadFilesFromLocalStorage();
   }, []);
   
-  // Save metadata to localStorage when files change
+  // Always generate chart when files change and there are files
   useEffect(() => {
-    try {
-      // Only save metadata, excluding the actual CSV data
-      const filesMetadata = files.map(file => ({
-        id: file.id,
-        name: file.name,
-        columns: file.columns,
-        selected: file.selected,
-        columnStyles: file.columnStyles,
-      }));
-      localStorage.setItem('csvFiles', JSON.stringify(filesMetadata));
-    } catch (error) {
-      console.error('Error saving files metadata:', error);
+    if (files.length > 0) {
+      generateChart();
     }
   }, [files]);
-  
-  useEffect(() => {
-    localStorage.setItem('chartOptions', JSON.stringify(chartOptions));
-  }, [chartOptions]);
   
   const addFile = async (file: File) => {
     try {
@@ -138,7 +106,11 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
         };
       });
       
-      setFiles(prev => [...prev, newFile]);
+      setFiles(prev => {
+        const newFiles = [...prev, newFile];
+        saveFilesToLocalStorage(newFiles);
+        return newFiles;
+      });
     } catch (error) {
       console.error('Error adding file:', error);
       throw error;
@@ -146,12 +118,18 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
   };
   
   const removeFile = (id: string) => {
-    setFiles(prev => prev.filter(file => file.id !== id));
+    // Remove the file data from localStorage
+    localStorage.removeItem(`csvData_${id}`);
+    setFiles(prev => {
+      const newFiles = prev.filter(file => file.id !== id);
+      saveFilesToLocalStorage(newFiles);
+      return newFiles;
+    });
   };
   
   const updateAxisSelection = (fileId: string, xAxis: string, yAxes: string[]) => {
-    setFiles(prev => 
-      prev.map(file => 
+    setFiles(prev => {
+      const newFiles = prev.map(file => 
         file.id === fileId 
           ? {
               ...file,
@@ -163,13 +141,15 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
               }
             }
           : file
-      )
-    );
+      );
+      saveFilesToLocalStorage(newFiles);
+      return newFiles;
+    });
   };
   
   const updateLineStyle = (fileId: string, column: string, style: LineStyle) => {
-    setFiles(prev => 
-      prev.map(file => {
+    setFiles(prev => {
+      const newFiles = prev.map(file => {
         if (file.id === fileId && file.columnStyles[column]) {
           return {
             ...file,
@@ -183,13 +163,15 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
           };
         }
         return file;
-      })
-    );
+      });
+      saveFilesToLocalStorage(newFiles);
+      return newFiles;
+    });
   };
   
   const updatePointStyle = (fileId: string, column: string, style: PointStyle) => {
-    setFiles(prev => 
-      prev.map(file => {
+    setFiles(prev => {
+      const newFiles = prev.map(file => {
         if (file.id === fileId && file.columnStyles[column]) {
           return {
             ...file,
@@ -203,13 +185,15 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
           };
         }
         return file;
-      })
-    );
+      });
+      saveFilesToLocalStorage(newFiles);
+      return newFiles;
+    });
   };
   
   const updateColor = (fileId: string, column: string, color: string) => {
-    setFiles(prev => 
-      prev.map(file => {
+    setFiles(prev => {
+      const newFiles = prev.map(file => {
         if (file.id === fileId && file.columnStyles[column]) {
           return {
             ...file,
@@ -223,26 +207,32 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
           };
         }
         return file;
-      })
-    );
+      });
+      saveFilesToLocalStorage(newFiles);
+      return newFiles;
+    });
   };
   
   const updateAxisConfig = (axis: 'x' | 'y', config: Partial<AxisConfig>) => {
-    setChartOptions(prev => ({
-      ...prev,
-      axisConfig: {
-        ...prev.axisConfig,
-        [axis]: {
-          ...prev.axisConfig[axis],
-          ...config,
+    setChartOptions(prev => {
+      const newOptions = {
+        ...prev,
+        axisConfig: {
+          ...prev.axisConfig,
+          [axis]: {
+            ...prev.axisConfig[axis],
+            ...config,
+          },
         },
-      },
-    }));
+      };
+      saveChartOptionsToLocalStorage(newOptions);
+      return newOptions;
+    });
   };
   
   const renameAxis = (fileId: string, originalName: string, newName: string) => {
-    setFiles(prev => 
-      prev.map(file => {
+    setFiles(prev => {
+      const newFiles = prev.map(file => {
         if (file.id === fileId) {
           // Update column name in the columns array
           const updatedColumns = file.columns.map(col => 
@@ -281,16 +271,22 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
           };
         }
         return file;
-      })
-    );
+      });
+      saveFilesToLocalStorage(newFiles);
+      return newFiles;
+    });
   };
 
   //updateChartTitle
   const updateChartTitle = (newTitle: string) => {
-    setChartOptions(prev => ({
-      ...prev,
-      title: newTitle,
-    }));
+    setChartOptions(prev => {
+      const newOptions = {
+        ...prev,
+        title: newTitle,
+      };
+      saveChartOptionsToLocalStorage(newOptions);
+      return newOptions;
+    });
   };
   
   const generateChart = () => {
@@ -416,7 +412,7 @@ const getRandomColor = () => {
         },
       };
 
-      return {
+      const newOptions = {
         ...prev,
         fileConfigs: {
           ...prev.fileConfigs,
@@ -436,12 +432,14 @@ const getRandomColor = () => {
           },
         },
       };
+      saveChartOptionsToLocalStorage(newOptions);
+      return newOptions;
     });
   };
   
   const updateShowPoints = (fileId: string, column: string, showPoints: boolean) => {
-    setFiles(prev => 
-      prev.map(file => {
+    setFiles(prev => {
+      const newFiles = prev.map(file => {
         if (file.id === fileId && file.columnStyles[column]) {
           return {
             ...file,
@@ -455,13 +453,15 @@ const getRandomColor = () => {
           };
         }
         return file;
-      })
-    );
+      });
+      saveFilesToLocalStorage(newFiles);
+      return newFiles;
+    });
   };
 
   const updateShowLine = (fileId: string, column: string, showLine: boolean) => {
-    setFiles(prev => 
-      prev.map(file => {
+    setFiles(prev => {
+      const newFiles = prev.map(file => {
         if (file.id === fileId && file.columnStyles[column]) {
           return {
             ...file,
@@ -475,8 +475,85 @@ const getRandomColor = () => {
           };
         }
         return file;
-      })
-    );
+      });
+      saveFilesToLocalStorage(newFiles);
+      return newFiles;
+    });
+  };
+  
+  const saveFilesToLocalStorage = (newFiles: CSVFile[]) => {
+    try {
+      // Save metadata
+      const filesMetadata = newFiles.map(file => ({
+        id: file.id,
+        name: file.name,
+        columns: file.columns,
+        selected: file.selected,
+        columnStyles: file.columnStyles,
+      }));
+      localStorage.setItem('csvFiles', JSON.stringify(filesMetadata));
+      
+      // Save each file's data separately
+      newFiles.forEach(file => {
+        if (file.data && file.data.length > 0) {
+          localStorage.setItem(`csvData_${file.id}`, JSON.stringify(file.data));
+        }
+      });
+    } catch (error) {
+      console.error('Error saving files data:', error);
+    }
+  };
+  
+  const saveChartOptionsToLocalStorage = (newOptions: ChartOptions) => {
+    try {
+      localStorage.setItem('chartOptions', JSON.stringify(newOptions));
+    } catch (error) {
+      console.error('Error saving chart options:', error);
+    }
+  };
+  
+  const loadFilesFromLocalStorage = () => {
+    const savedFiles = localStorage.getItem('csvFiles');
+    const savedOptions = localStorage.getItem('chartOptions');
+    
+    if (savedFiles) {
+      try {
+        const filesMetadata = JSON.parse(savedFiles);
+        // Load each file's data from localStorage
+        const filesWithData = filesMetadata.map((file: any) => {
+          const fileData = localStorage.getItem(`csvData_${file.id}`);
+          let data = fileData ? JSON.parse(fileData) : [];
+          // Convert numeric fields and parse dates for xAxis
+          data = data.map((row: any) => {
+            const newRow: any = { ...row };
+            for (const key in newRow) {
+              // If this is the xAxis and looks like a date, parse it
+              if (key === file.selected?.xAxis && typeof newRow[key] === 'string' && !isNaN(Date.parse(newRow[key]))) {
+                newRow[key] = new Date(newRow[key]);
+              } else if (newRow[key] !== null && newRow[key] !== '' && !isNaN(newRow[key])) {
+                newRow[key] = Number(newRow[key]);
+              }
+            }
+            return newRow;
+          });
+          return {
+            ...file,
+            data,
+          };
+        });
+        setFiles(filesWithData);
+      } catch (error) {
+        console.error('Error loading saved files:', error);
+      }
+    }
+    
+    if (savedOptions) {
+      try {
+        setChartOptions(JSON.parse(savedOptions));
+      } catch (error) {
+        console.error('Error loading saved options:', error);
+      }
+    }
   };
   
   const value = {
@@ -497,6 +574,9 @@ const getRandomColor = () => {
     updateFileChartConfig,
     updateShowPoints,
     updateShowLine,
+    saveFilesToLocalStorage,
+    saveChartOptionsToLocalStorage,
+    loadFilesFromLocalStorage,
   };
   
   return (

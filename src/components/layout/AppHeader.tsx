@@ -22,20 +22,25 @@ const AppHeader: React.FC = () => {
       }}
     >
       <Toolbar>
-        <LineChart size={32} color="white" />
-        <Typography
-          variant="h5"
-          component="div"
-          sx={{ 
-            ml: 1.5,
-            fontWeight: 600,
-            flexGrow: 1,
-            display: 'flex',
-            alignItems: 'center',
-          }}
+        <Box
+          sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}
+          onClick={() => window.location.reload()}
         >
-          DataViz
-        </Typography>
+          <LineChart size={32} color="white" />
+          <Typography
+            variant="h5"
+            component="div"
+            sx={{ 
+              ml: 1.5,
+              fontWeight: 600,
+              flexGrow: 1,
+              display: 'flex',
+              alignItems: 'center',
+            }}
+          >
+            DataViz
+          </Typography>
+        </Box>
         
         <Box sx={{ display: 'flex' }}>
           
