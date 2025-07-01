@@ -48,10 +48,41 @@ const MultiChartView: React.FC<MultiChartViewProps> = ({ data, options, onBack, 
                 alignItems: 'center',
                 mb: 2 
               }}>
-  
                 <Typography variant="h6">
                   {options.title || 'Combined Chart'}
                 </Typography>
+                <Box>
+                  <Tooltip title="Download as PNG">
+                    <IconButton
+                      aria-label="Download as PNG"
+                      onClick={() => {
+                        const svg = svgRefs.current.get('combined');
+                        if (svg) {
+                          import('../../utils/downloadUtils').then(utils => {
+                            utils.downloadSvgAsPng(svg, `${options.title || 'Combined Chart'}.png`, svg.width.baseVal.value, svg.height.baseVal.value);
+                          });
+                        }
+                      }}
+                    >
+                      <Image />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Download as SVG">
+                    <IconButton
+                      aria-label="Download as SVG"
+                      onClick={() => {
+                        const svg = svgRefs.current.get('combined');
+                        if (svg) {
+                          import('../../utils/downloadUtils').then(utils => {
+                            utils.downloadSvg(svg, `${options.title || 'Combined Chart'}.svg`);
+                          });
+                        }
+                      }}
+                    >
+                      <Download />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
               </Box>
               <Box sx={{ width: '100%', height: 550 }}>
                 <D3LineChart
@@ -74,6 +105,38 @@ const MultiChartView: React.FC<MultiChartViewProps> = ({ data, options, onBack, 
                     <Typography variant="h6">
                       {options.fileConfigs?.[fileId]?.title || `${fileName}`}
                     </Typography>
+                    <Box>
+                      <Tooltip title="Download as PNG">
+                        <IconButton
+                          aria-label="Download as PNG"
+                          onClick={() => {
+                            const svg = svgRefs.current.get(fileId);
+                            if (svg) {
+                              import('../../utils/downloadUtils').then(utils => {
+                                utils.downloadSvgAsPng(svg, `${fileName}.png`, svg.width.baseVal.value, svg.height.baseVal.value);
+                              });
+                            }
+                          }}
+                        >
+                          <Image />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Download as SVG">
+                        <IconButton
+                          aria-label="Download as SVG"
+                          onClick={() => {
+                            const svg = svgRefs.current.get(fileId);
+                            if (svg) {
+                              import('../../utils/downloadUtils').then(utils => {
+                                utils.downloadSvg(svg, `${fileName}.svg`);
+                              });
+                            }
+                          }}
+                        >
+                          <Download />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
                   </Box>
                   <Box sx={{ width: '100%', height: 550 }}>
                     <D3LineChart

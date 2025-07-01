@@ -298,21 +298,26 @@ const VisualizationStep: React.FC<VisualizationStepProps> = ({ onBack, onReset }
                 Reset
               </Button>
             )}
-            <Button
-              variant="outlined"
-              onClick={handleExportAllSvg}
-              startIcon={<Download size={18} />}
-              sx={{ mr: 1 }}
-            >
-              Download All (SVG)
-            </Button>
-            <Button
-              variant="outlined"
-              onClick={handleExportAllPng}
-              startIcon={<Image size={18} />}
-            >
-              Download All (PNG)
-            </Button>
+            {
+              (chartDisplayMode !== 'single' && chartDisplayMode !== 'hybrid') && (
+                <>  <Button
+                variant="outlined"
+                onClick={handleExportAllSvg}
+                startIcon={<Download size={18} />}
+                sx={{ mr: 1 }}
+              >
+                Download All (SVG)
+              </Button>
+              <Button
+                variant="outlined"
+                onClick={handleExportAllPng}
+                startIcon={<Image size={18} />}
+              >
+                Download All (PNG)
+              </Button></>
+              )
+            }
+          
           </Box>
         </Box>
         {loading ? (
