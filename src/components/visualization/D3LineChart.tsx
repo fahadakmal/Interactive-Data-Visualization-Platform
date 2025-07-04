@@ -272,16 +272,40 @@ const D3LineChart: React.FC<D3LineChartProps> = ({ data, options, svgRef }) => {
           });
         });
       }
-      // Tooltip (clipped)
+      // Beautiful Tooltip
       const tooltip = d3.select('body').append('div')
         .attr('class', 'd3-tooltip')
         .style('position', 'absolute')
-        .style('background-color', 'rgba(0, 0, 0, 0.8)')
+        .style('background', 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)')
         .style('color', 'white')
-        .style('padding', '8px')
-        .style('border-radius', '4px')
+        .style('padding', '16px')
+        .style('border-radius', '12px')
+        .style('box-shadow', '0 10px 25px rgba(0, 0, 0, 0.2), 0 4px 10px rgba(0, 0, 0, 0.1)')
         .style('pointer-events', 'none')
-        .style('opacity', 0);
+        .style('opacity', 0)
+        .style('transform', 'translateY(-10px)')
+        .style('transition', 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)')
+        .style('backdrop-filter', 'blur(10px)')
+        .style('border', '1px solid rgba(255, 255, 255, 0.2)')
+        .style('min-width', '200px')
+        .style('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif')
+        .style('font-size', '14px')
+        .style('line-height', '1.5')
+        .style('z-index', '1000');
+
+      // Add tooltip arrow
+      const tooltipArrow = tooltip.append('div')
+        .style('position', 'absolute')
+        .style('width', '0')
+        .style('height', '0')
+        .style('border-left', '8px solid transparent')
+        .style('border-right', '8px solid transparent')
+        .style('border-top', '8px solid #667eea')
+        .style('top', '100%')
+        .style('left', '50%')
+        .style('transform', 'translateX(-50%)')
+        .style('filter', 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1))');
+
       data.datasets.forEach(dataset => {
         plotArea.selectAll(`.tooltip-circle-${dataset.id}`)
           .data(dataset.data)
@@ -290,22 +314,75 @@ const D3LineChart: React.FC<D3LineChartProps> = ({ data, options, svgRef }) => {
           .attr('class', `tooltip-circle-${dataset.id}`)
           .attr('cx', d => xS(d.x))
           .attr('cy', d => yS(d.y))
-          .attr('r', 5)
+          .attr('r', 6)
           .attr('fill', 'transparent')
+          .attr('stroke', dataset.style.color)
+          .attr('stroke-width', 2)
+          .style('opacity', 0)
+          .style('transition', 'all 0.2s ease')
           .on('mouseover', (event, d) => {
+            // Show the circle
+            d3.select(event.currentTarget)
+              .style('opacity', 1)
+              .attr('r', 8);
+
             const xValue = dataset.isDateXAxis ? d3.timeFormat('%Y-%m-%d %H:%M:%S')(new Date(d.x)) : d.x.toFixed(2);
-            const yValue = d.y.toFixed(2);
-            tooltip.html(`X: ${xValue}<br/>${dataset.label}: ${yValue}`)
-              .style('left', (event.pageX + 10) + 'px')
-              .style('top', (event.pageY - 20) + 'px')
-              .transition()
-              .duration(200)
-              .style('opacity', 0.9);
+            
+            // Find all datasets that have data points at this X value
+            const datasetsAtX = data.datasets.filter(ds => {
+              return ds.data.some(point => {
+                const pointX = ds.isDateXAxis ? new Date(point.x).getTime() : point.x;
+                const currentX = dataset.isDateXAxis ? new Date(d.x).getTime() : d.x;
+                return Math.abs(pointX - currentX) < 0.001; // Small tolerance for floating point comparison
+              });
+            });
+
+            // Create beautiful tooltip content
+            let tooltipContent = `
+              <div style="margin-bottom: 12px;">
+                <div style="font-weight: 600; font-size: 16px; margin-bottom: 6px; color: #ffffff; text-align: center;">
+                   ${xValue}
+                </div>
+                <div style="height: 2px; background: linear-gradient(90deg, rgba(255,255,255,0.3), rgba(255,255,255,0.1)); border-radius: 1px; margin: 8px 0;"></div>
+              </div>
+            `;
+
+            // Add each dataset's Y value at this X coordinate
+            datasetsAtX.forEach(ds => {
+              const pointAtX = ds.data.find(point => {
+                const pointX = ds.isDateXAxis ? new Date(point.x).getTime() : point.x;
+                const currentX = dataset.isDateXAxis ? new Date(d.x).getTime() : d.x;
+                return Math.abs(pointX - currentX) < 0.001;
+              });
+
+              if (pointAtX) {
+                const yValue = pointAtX.y.toFixed(2);
+                tooltipContent += `
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding: 4px 0;">
+                    <div style="display: flex; align-items: center;">
+                      <div style="width: 12px; height: 12px; background: ${ds.style.color}; border-radius: 50%; margin-right: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"></div>
+                      <span style="color: rgba(255,255,255,0.9); font-size: 13px; font-weight: 500;">${ds.label}</span>
+                    </div>
+                    <span style="font-weight: 600; color: #ffffff; font-size: 14px;">${yValue}</span>
+                  </div>
+                `;
+              }
+            });
+
+            tooltip.html(tooltipContent)
+              .style('left', (event.pageX + 15) + 'px')
+              .style('top', (event.pageY - 80) + 'px')
+              .style('opacity', 1)
+              .style('transform', 'translateY(0)');
           })
-          .on('mouseout', () => {
-            tooltip.transition()
-              .duration(500)
-              .style('opacity', 0);
+          .on('mouseout', (event) => {
+            // Hide the circle
+            d3.select(event.currentTarget)
+              .style('opacity', 0)
+              .attr('r', 6);
+
+            tooltip.style('opacity', 0)
+              .style('transform', 'translateY(-10px)');
           });
       });
     }
