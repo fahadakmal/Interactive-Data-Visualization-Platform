@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Box, 
   Container, 
@@ -25,22 +25,27 @@ const steps = [
 ];
 
 const MainLayout: React.FC = () => {
-  const [activeStep, setActiveStep] = useState(0);
+  const [activeStep, setActiveStep] = useState(() => {
+    const savedStep = localStorage.getItem('activeStep');
+    return savedStep !== null ? Number(savedStep) : 0;
+  });
   const { files, chartData, resetChart } = useVisualization();
+
+  useEffect(() => {
+    localStorage.setItem('activeStep', String(activeStep));
+  }, [activeStep]);
 
   const handleNext = () => {
     setActiveStep((prevStep) => prevStep + 1);
   };
 
   const handleBack = () => {
-    setActiveStep((prevStep) => prevStep - 1);
-    if (activeStep === 3) {
-      resetChart();
-    }
+    setActiveStep((prevStep) => Math.max(prevStep - 1, 0));
   };
 
   const handleReset = () => {
     setActiveStep(0);
+    localStorage.removeItem('activeStep');
     resetChart();
   };
 

@@ -461,6 +461,38 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
   };
   
   const resetChart = () => {
+    // Remove main keys
+    localStorage.removeItem('csvFiles');
+    localStorage.removeItem('chartOptions');
+    // Remove all csvData_* keys
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith('csvData_')) {
+        localStorage.removeItem(key);
+      }
+    });
+    setFiles([]);
+    setChartOptions({
+      title: '',
+      showLegend: true,
+      showGrid: true,
+      axisConfig: {
+        x: {
+          label: '',
+          showLabel: true,
+          showTicks: true,
+          tickRotation: 0,
+          autoScale: true,
+        },
+        y: {
+          label: '',
+          showLabel: true,
+          showTicks: true,
+          tickRotation: 0,
+          autoScale: true,
+        },
+      },
+      seriesStyles: {},
+    });
     setChartData(null);
   };
   

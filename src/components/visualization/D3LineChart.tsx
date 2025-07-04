@@ -313,20 +313,7 @@ const D3LineChart: React.FC<D3LineChartProps> = ({ data, options, svgRef }) => {
     // Initial draw
     drawChart(xScale, yScale);
 
-    // --- ZOOM BEHAVIOR ---
-    const zoomed = (event: any) => {
-      // Use d3's rescaleX/rescaleY to get new scales
-      const newX = event.transform.rescaleX(xScale);
-      const newY = event.transform.rescaleY(yScale);
-      drawChart(newX, newY);
-    };
-    const zoomBehavior = d3.zoom()
-      .scaleExtent([1, 100])
-      .on('zoom', zoomed);
-    if (chartRef.current) {
-      d3.select(chartRef.current as Element).call(zoomBehavior);
-    }
-    // --- END ZOOM ---
+   
   }, [data, options, chartRef]);
 
   return (
