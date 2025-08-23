@@ -11,6 +11,11 @@ interface D3LineChartProps {
 const D3LineChart: React.FC<D3LineChartProps> = ({ data, options, svgRef }) => {
   const chartRef = useRef<SVGSVGElement | null>(null);
 
+  // Function to sanitize IDs for CSS selectors
+  const sanitizeId = (id: string): string => {
+    return id.replace(/[^a-zA-Z0-9-_]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+  };
+
   useEffect(() => {
     if (chartRef.current) {
       svgRef(chartRef.current);
@@ -222,7 +227,7 @@ const D3LineChart: React.FC<D3LineChartProps> = ({ data, options, svgRef }) => {
             .attr('stroke-width', 2)
             .attr('stroke-dasharray', getDashArray(style.lineStyle))
             .attr('d', line)
-            .attr('class', `line-${dataset.id}`)
+            .attr('class', `line-${sanitizeId(dataset.id)}`)
             .style('opacity', 0)
             .transition()
             .duration(1000)
@@ -230,11 +235,11 @@ const D3LineChart: React.FC<D3LineChartProps> = ({ data, options, svgRef }) => {
         }
         if (style.showPoints && style.pointStyle !== 'none') {
           const pointSymbol = getPointSymbol(style.pointStyle);
-          plotArea.selectAll(`.point-${dataset.id}`)
+          plotArea.selectAll(`.point-${sanitizeId(dataset.id)}`)
             .data(dataset.data)
             .enter()
             .append('path')
-            .attr('class', `point-${dataset.id}`)
+            .attr('class', `point-${sanitizeId(dataset.id)}`)
             .attr('d', pointSymbol)
             .attr('transform', d => `translate(${xS(d.x)},${yS(d.y)})`)
             .attr('fill', style.color)
@@ -264,9 +269,9 @@ const D3LineChart: React.FC<D3LineChartProps> = ({ data, options, svgRef }) => {
             .style('font-size', '12px')
             .style('fill', dataset.style.color);
           legendItem.on('click', () => {
-            const isVisible = d3.select(`.line-${dataset.id}`).style('display') !== 'none';
-            d3.select(`.line-${dataset.id}`).style('display', isVisible ? 'none' : '');
-            d3.selectAll(`.point-${dataset.id}`).style('display', isVisible ? 'none' : '');
+            const isVisible = d3.select(`.line-${sanitizeId(dataset.id)}`).style('display') !== 'none';
+            d3.select(`.line-${sanitizeId(dataset.id)}`).style('display', isVisible ? 'none' : '');
+            d3.selectAll(`.point-${sanitizeId(dataset.id)}`).style('display', isVisible ? 'none' : '');
             legendItem.select('text')
               .style('fill', isVisible ? '#ccc' : dataset.style.color);
           });
@@ -307,11 +312,11 @@ const D3LineChart: React.FC<D3LineChartProps> = ({ data, options, svgRef }) => {
         .style('filter', 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1))');
 
       data.datasets.forEach(dataset => {
-        plotArea.selectAll(`.tooltip-circle-${dataset.id}`)
+        plotArea.selectAll(`.tooltip-circle-${sanitizeId(dataset.id)}`)
           .data(dataset.data)
           .enter()
           .append('circle')
-          .attr('class', `tooltip-circle-${dataset.id}`)
+          .attr('class', `tooltip-circle-${sanitizeId(dataset.id)}`)
           .attr('cx', d => xS(d.x))
           .attr('cy', d => yS(d.y))
           .attr('r', 6)
