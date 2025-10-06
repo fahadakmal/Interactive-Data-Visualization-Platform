@@ -235,7 +235,8 @@ const VisualizationStep: React.FC<VisualizationStepProps> = ({ onBack, onReset }
   return (
     <Box sx={{ py: 2 }}>
       {/* Chart display mode toggle */}
-      <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-end' }}>
+      {/**
+            <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-end' }}>
         <Tooltip
           title={isSingleChartCompatible ? '' : 'All files must have the same X axis name and type to combine into a single chart.'}
           arrow
@@ -257,6 +258,8 @@ const VisualizationStep: React.FC<VisualizationStepProps> = ({ onBack, onReset }
           </span>
         </Tooltip>
       </Box>
+       */}
+
       {showSingleWarning && (
         <Alert severity="warning" sx={{ mb: 2 }}>
           Cannot combine files into a single chart. All files must have the same X axis name and type.
@@ -277,7 +280,9 @@ const VisualizationStep: React.FC<VisualizationStepProps> = ({ onBack, onReset }
         {/* Main header for all charts */}
         <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Typography variant="h6">Multiple Charts View</Typography>
-          <Box>
+          {
+            /* Chart action buttons
+                    <Box>
             {onBack && (
               <Button
                 variant="outlined"
@@ -319,6 +324,9 @@ const VisualizationStep: React.FC<VisualizationStepProps> = ({ onBack, onReset }
             }
           
           </Box>
+            */
+          }
+  
         </Box>
         {loading ? (
           <Box sx={{ 

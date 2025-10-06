@@ -84,7 +84,7 @@ const MultiChartView: React.FC<MultiChartViewProps> = ({ data, options, onBack, 
                   </Tooltip>
                 </Box>
               </Box>
-              <Box sx={{ width: '100%', height: 550 }}>
+              <Box sx={{ width: '100%', height: 700 }}>
                 <D3LineChart
                   data={data}
                   options={options}
@@ -138,7 +138,7 @@ const MultiChartView: React.FC<MultiChartViewProps> = ({ data, options, onBack, 
                       </Tooltip>
                     </Box>
                   </Box>
-                  <Box sx={{ width: '100%', height: 550 }}>
+                  <Box sx={{ width: '100%', height: 650 }}>
                     <D3LineChart
                       data={{ datasets }}
                       options={{

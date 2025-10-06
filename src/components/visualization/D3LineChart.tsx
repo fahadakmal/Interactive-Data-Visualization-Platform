@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import * as d3 from 'd3';
-import { ChartData, ChartOptions, Dataset, DataPoint } from '../../types/visualization';
+import { ChartData, ChartOptions, DataPoint } from '../../types/visualization';
 
 interface D3LineChartProps {
   data: ChartData;
@@ -30,10 +30,10 @@ const D3LineChart: React.FC<D3LineChartProps> = ({ data, options, svgRef }) => {
       d3.select(chartRef.current).selectAll('*').remove();
     }
 
-    // Chart dimensions and margins
-    const margin = { top: 40, right: 80, bottom: 60, left: 80 };
-    const svgWidth = options.chartWidth || chartRef.current?.parentElement?.clientWidth || 800;
-    const svgHeight = options.chartHeight || 500;
+  // Chart dimensions and margins (increased for clarity)
+  const margin = { top: 48, right: 100, bottom: 80, left: 90 };
+  const svgWidth = options.chartWidth || chartRef.current?.parentElement?.clientWidth || 900;
+  const svgHeight = options.chartHeight || 650;
     const width = svgWidth - margin.left - margin.right;
     const height = svgHeight - margin.top - margin.bottom;
 
@@ -111,23 +111,12 @@ const D3LineChart: React.FC<D3LineChartProps> = ({ data, options, svgRef }) => {
       plotArea.selectAll('*').remove();
       // Axes
       const xAxis = hasDateX
-        ? d3.axisBottom(xS).tickFormat((d) => {
-            const date = new Date(d as number);
-            const formatMillisecond = d3.timeFormat('%H:%M:%S.%L');
-            const formatSecond = d3.timeFormat('%H:%M:%S');
-            const formatMinute = d3.timeFormat('%H:%M');
-            const formatHour = d3.timeFormat('%H:%M');
-            const formatDay = d3.timeFormat('%b %d');
-            const formatMonth = d3.timeFormat('%Y %b');
-            const formatYear = d3.timeFormat('%Y');
-            return (d3.timeSecond(date) < date ? formatMillisecond
-                : d3.timeMinute(date) < date ? formatSecond
-                : d3.timeHour(date) < date ? formatMinute
-                : d3.timeDay(date) < date ? formatHour
-                : d3.timeMonth(date) < date ? formatDay
-                : d3.timeYear(date) < date ? formatMonth
-                : formatYear)(date);
-          })
+        ? d3.axisBottom(xS)
+            .ticks(d3.timeMonth.every(1)) // Show one tick per month
+            .tickFormat((d) => {
+              const date = new Date(d as number);
+              return d3.timeFormat('%b %Y')(date); // Format: "Jan 2023"
+            })
         : d3.axisBottom(xS);
       const yAxis = hasDateY
         ? d3.axisLeft(yS).tickFormat((d) => d3.timeFormat('%Y-%m-%d')(new Date(d as number)))
@@ -140,9 +129,11 @@ const D3LineChart: React.FC<D3LineChartProps> = ({ data, options, svgRef }) => {
         const rotation = options.axisConfig.x.tickRotation !== undefined ? options.axisConfig.x.tickRotation : -45;
         xAxisGroup.selectAll('text')
           .attr('transform', `rotate(${rotation})`)
-          .style('text-anchor', rotation > 0 ? 'start' : 'end')
-          .attr('dx', rotation > 0 ? '0.8em' : '-0.8em')
-          .attr('dy', rotation > 0 ? '0.15em' : '0.15em');
+          .style('text-anchor', rotation !== 0 ? (rotation > 0 ? 'start' : 'end') : 'middle')
+          .attr('dx', rotation > 0 ? '0.8em' : (rotation < 0 ? '-0.8em' : '0'))
+          .attr('dy', '0.6em')
+          .style('font-size', '13px')
+          .style('fill', '#333');
       }
       content.append('g')
         .attr('class', 'y-axis')
@@ -151,17 +142,21 @@ const D3LineChart: React.FC<D3LineChartProps> = ({ data, options, svgRef }) => {
       content.append('text')
         .attr('class', 'x-axis-label')
         .attr('x', width / 2)
-        .attr('y', height + margin.bottom - 10)
+        .attr('y', height + margin.bottom - 16)
         .style('text-anchor', 'middle')
-        .style('font-size', '14px')
+        .style('font-size', '15px')
+        .style('fill', '#111')
+        .style('font-weight', 600)
         .text(options.axisConfig.x.label);
       content.append('text')
         .attr('class', 'y-axis-label')
         .attr('transform', 'rotate(-90)')
         .attr('x', -height / 2)
-        .attr('y', -margin.left + 20)
+        .attr('y', -margin.left + 18)
         .style('text-anchor', 'middle')
-        .style('font-size', '14px')
+        .style('font-size', '15px')
+        .style('fill', '#111')
+        .style('font-weight', 600)
         .text(options.axisConfig.y.label);
       // Chart title
       content.append('text')
@@ -179,22 +174,26 @@ const D3LineChart: React.FC<D3LineChartProps> = ({ data, options, svgRef }) => {
           .attr('transform', `translate(0,${height})`)
           .call(
             d3.axisBottom(xS)
+              .ticks(hasDateX ? d3.timeMonth.every(1) : 5)
               .tickSize(-height)
               .tickFormat(() => '')
           )
           .selectAll('line')
-          .style('stroke', '#e0e0e0')
-          .style('stroke-opacity', 0.7);
+          .style('stroke', '#f0f0f0')
+          .style('stroke-opacity', 0.9)
+          .style('shape-rendering', 'crispEdges');
         plotArea.append('g')
           .attr('class', 'grid y-grid')
           .call(
             d3.axisLeft(yS)
+              .ticks(6)
               .tickSize(-width)
               .tickFormat(() => '')
           )
           .selectAll('line')
-          .style('stroke', '#e0e0e0')
-          .style('stroke-opacity', 0.7);
+          .style('stroke', '#f0f0f0')
+          .style('stroke-opacity', 0.9)
+          .style('shape-rendering', 'crispEdges');
       }
       // Line generator
       const line = d3.line<DataPoint>()
@@ -224,16 +223,19 @@ const D3LineChart: React.FC<D3LineChartProps> = ({ data, options, svgRef }) => {
             .datum(dataset.data)
             .attr('fill', 'none')
             .attr('stroke', style.color)
-            .attr('stroke-width', 2)
+            .attr('stroke-width', 3)
+            .attr('stroke-linejoin', 'round')
+            .attr('stroke-linecap', 'round')
             .attr('stroke-dasharray', getDashArray(style.lineStyle))
             .attr('d', line)
             .attr('class', `line-${sanitizeId(dataset.id)}`)
             .style('opacity', 0)
             .transition()
-            .duration(1000)
+            .duration(600)
             .style('opacity', 1);
         }
         if (style.showPoints && style.pointStyle !== 'none') {
+          // Increase point size and reduce staggered animation for clarity
           const pointSymbol = getPointSymbol(style.pointStyle);
           plotArea.selectAll(`.point-${sanitizeId(dataset.id)}`)
             .data(dataset.data)
@@ -245,8 +247,7 @@ const D3LineChart: React.FC<D3LineChartProps> = ({ data, options, svgRef }) => {
             .attr('fill', style.color)
             .style('opacity', 0)
             .transition()
-            .delay((_, i) => i * 50)
-            .duration(500)
+            .duration(300)
             .style('opacity', 1);
         }
       });
@@ -257,17 +258,19 @@ const D3LineChart: React.FC<D3LineChartProps> = ({ data, options, svgRef }) => {
           .attr('transform', `translate(${width + 10}, 0)`);
         data.datasets.forEach((dataset, i) => {
           const legendItem = legend.append('g')
-            .attr('transform', `translate(0, ${i * 25})`);
+            .attr('transform', `translate(0, ${i * 30})`);
           legendItem.append('rect')
-            .attr('width', 15)
-            .attr('height', 15)
-            .attr('fill', dataset.style.color);
+            .attr('width', 18)
+            .attr('height', 18)
+            .attr('fill', dataset.style.color)
+            .attr('rx', 3); // Rounded corners
           legendItem.append('text')
-            .attr('x', 24)
-            .attr('y', 12)
+            .attr('x', 26)
+            .attr('y', 14)
             .text(dataset.label)
-            .style('font-size', '12px')
-            .style('fill', dataset.style.color);
+            .style('font-size', '13px')
+            .style('font-weight', '600')
+            .style('fill', '#333');
           legendItem.on('click', () => {
             const isVisible = d3.select(`.line-${sanitizeId(dataset.id)}`).style('display') !== 'none';
             d3.select(`.line-${sanitizeId(dataset.id)}`).style('display', isVisible ? 'none' : '');
@@ -299,7 +302,7 @@ const D3LineChart: React.FC<D3LineChartProps> = ({ data, options, svgRef }) => {
         .style('z-index', '1000');
 
       // Add tooltip arrow
-      const tooltipArrow = tooltip.append('div')
+      tooltip.append('div')
         .style('position', 'absolute')
         .style('width', '0')
         .style('height', '0')

@@ -1,16 +1,21 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { 
-  CSVFile, 
-  ChartOptions, 
-  ChartData, 
-  LineStyle, 
+import {
+  CSVFile,
+  ChartOptions,
+  ChartData,
+  LineStyle,
   PointStyle,
-  AxisConfig
+  AxisConfig,
+  SatisfactionResponse,
+  TaskResponse
 } from '../types/visualization';
 import { parseCSV } from '../utils/csvParser';
+import { FinalPreferenceResponse } from '../components/FinalPreferenceQuestionnaire';
+import { DemographicsData } from '../components/DemographicsForm';
 
 interface VisualizationContextType {
+  // Existing visualization context
   files: CSVFile[];
   chartData: ChartData | null;
   chartOptions: ChartOptions;
@@ -19,6 +24,9 @@ interface VisualizationContextType {
   isSingleChartCompatible: boolean;
   getHybridChartGroups: () => { combined: CSVFile[]; separate: CSVFile[] };
   addFile: (file: File) => Promise<void>;
+  addParsedFile: (name: string, data: any[], columns: string[]) => void;
+  setXAxis: (fileName: string, column: string) => void;
+  setYAxis: (fileName: string, column: string) => void;
   removeFile: (id: string) => void;
   updateAxisSelection: (fileId: string, xAxis: string, yAxes: string[]) => void;
   updateLineStyle: (fileId: string, column: string, style: LineStyle) => void;
@@ -35,6 +43,22 @@ interface VisualizationContextType {
   saveFilesToLocalStorage: (newFiles: CSVFile[]) => void;
   saveChartOptionsToLocalStorage: (newOptions: ChartOptions) => void;
   loadFilesFromLocalStorage: () => void;
+
+  // Experiment-specific state
+  participantId: string;
+  assignedGroup: 'A' | 'B';
+  demographics: DemographicsData | null;
+  setDemographics: (data: DemographicsData) => void;
+  satisfactionResponses: SatisfactionResponse[];
+  addSatisfactionResponse: (response: Omit<SatisfactionResponse, 'timestamp'>) => void;
+  getSatisfactionResponses: () => SatisfactionResponse[];
+  clearSatisfactionResponses: () => void;
+  taskResponses: TaskResponse[];
+  addTaskResponse: (response: TaskResponse) => void;
+  getTaskResponses: () => TaskResponse[];
+  clearTaskResponses: () => void;
+  finalPreference: FinalPreferenceResponse | null;
+  setFinalPreference: (response: FinalPreferenceResponse) => void;
 }
 
 const DEFAULT_CHART_OPTIONS: ChartOptions = {
@@ -67,10 +91,46 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
   const [chartData, setChartData] = useState<ChartData | null>(null);
   const [chartOptions, setChartOptions] = useState<ChartOptions>(DEFAULT_CHART_OPTIONS);
   const [chartDisplayMode, setChartDisplayMode] = useState<'single' | 'separate' | 'hybrid'>('separate');
-  
+  const [satisfactionResponses, setSatisfactionResponses] = useState<SatisfactionResponse[]>([]);
+  const [taskResponses, setTaskResponses] = useState<TaskResponse[]>([]);
+
+  // Demographics data
+  const [demographics, setDemographicsState] = useState<DemographicsData | null>(() => {
+    const saved = localStorage.getItem('demographics');
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  // Participant ID - Generate UUID and persist to localStorage
+  const [participantId] = useState<string>(() => {
+    const saved = localStorage.getItem('participantId');
+    if (saved) return saved;
+    const newId = uuidv4();
+    localStorage.setItem('participantId', newId);
+    console.log('✅ Generated new participant ID:', newId);
+    return newId;
+  });
+
+  // Assigned Group - Deterministic counterbalancing based on UUID parity
+  // Chapter 4:209-223 - Group A (even): Overlay first, Group B (odd): Small multiples first
+  const [assignedGroup] = useState<'A' | 'B'>(() => {
+    const idHash = participantId.split('-')[0];
+    const idNumber = parseInt(idHash, 16);
+    const group = (idNumber % 2 === 0) ? 'A' : 'B';
+    console.log('✅ Participant assigned to Group', group, '(UUID parity:', idNumber % 2, ')');
+    return group;
+  });
+
+  // Final Preference - Stored after both blocks complete
+  const [finalPreference, setFinalPreference] = useState<FinalPreferenceResponse | null>(() => {
+    const saved = localStorage.getItem('finalPreference');
+    return saved ? JSON.parse(saved) : null;
+  });
+
   // Load data from localStorage on application startup
   useEffect(() => {
     loadFilesFromLocalStorage();
+    loadSatisfactionResponses();
+    loadTaskResponses();
   }, []);
   
   // Always generate chart when files change and there are files
@@ -91,10 +151,10 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       const parsedData = await parseCSV(file);
       const columns = Object.keys(parsedData.data[0] || {});
-      
+
       const defaultXAxis = columns[0] || '';
       const defaultYAxes = columns.length > 1 ? [columns[1]] : [];
-      
+
       const newFile: CSVFile = {
         id: uuidv4(),
         name: file.name,
@@ -106,7 +166,7 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
         },
         columnStyles: {},
       };
-      
+
       // Initialize column styles with default values
       columns.forEach(col => {
         newFile.columnStyles[col] = {
@@ -117,7 +177,7 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
           showLine: true,
         };
       });
-      
+
       setFiles(prev => {
         const newFiles = [...prev, newFile];
         saveFilesToLocalStorage(newFiles);
@@ -128,7 +188,80 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
       throw error;
     }
   };
-  
+
+  // Add pre-parsed file (for experimental data loading)
+  const addParsedFile = (name: string, data: any[], columns: string[]) => {
+    const defaultXAxis = columns[0] || '';
+    const defaultYAxes = columns.length > 1 ? [columns[1]] : [];
+
+    const newFile: CSVFile = {
+      id: uuidv4(),
+      name,
+      columns,
+      data,
+      selected: {
+        xAxis: defaultXAxis,
+        yAxes: defaultYAxes,
+      },
+      columnStyles: {},
+    };
+
+    // Initialize column styles with default values
+    columns.forEach(col => {
+      newFile.columnStyles[col] = {
+        color: getRandomColor(),
+        lineStyle: 'solid',
+        pointStyle: 'circle',
+        showPoints: true,
+        showLine: true,
+      };
+    });
+
+    setFiles(prev => {
+      const newFiles = [...prev, newFile];
+      saveFilesToLocalStorage(newFiles);
+      return newFiles;
+    });
+  };
+
+  // Set X-axis for a file by name
+  const setXAxis = (fileName: string, column: string) => {
+    setFiles(prev => {
+      const newFiles = prev.map(file =>
+        file.name === fileName
+          ? {
+              ...file,
+              selected: {
+                ...file.selected,
+                xAxis: column,
+              }
+            }
+          : file
+      );
+      saveFilesToLocalStorage(newFiles);
+      return newFiles;
+    });
+  };
+
+  // Set Y-axis for a file by name
+  const setYAxis = (fileName: string, column: string) => {
+    setFiles(prev => {
+      const newFiles = prev.map(file =>
+        file.name === fileName
+          ? {
+              ...file,
+              selected: {
+                ...file.selected,
+                yAxes: [column],
+              }
+            }
+          : file
+      );
+      saveFilesToLocalStorage(newFiles);
+      return newFiles;
+    });
+  };
+
   const removeFile = (id: string) => {
     // Remove the file data from localStorage
     localStorage.removeItem(`csvData_${id}`);
@@ -701,7 +834,107 @@ const getRandomColor = () => {
     const separate = files.filter(f => !combined.includes(f));
     return { combined, separate };
   }, [files]);
-  
+
+  // Satisfaction response management
+  const addSatisfactionResponse = (response: Omit<SatisfactionResponse, 'timestamp'>) => {
+    const newResponse: SatisfactionResponse = {
+      ...response,
+      timestamp: Date.now(),
+    };
+    setSatisfactionResponses(prev => {
+      const updated = [...prev, newResponse];
+      saveSatisfactionResponsesToLocalStorage(updated);
+      return updated;
+    });
+  };
+
+  const getSatisfactionResponses = () => {
+    return satisfactionResponses;
+  };
+
+  const clearSatisfactionResponses = () => {
+    setSatisfactionResponses([]);
+    localStorage.removeItem('satisfactionResponses');
+  };
+
+  const saveSatisfactionResponsesToLocalStorage = (responses: SatisfactionResponse[]) => {
+    try {
+      localStorage.setItem('satisfactionResponses', JSON.stringify(responses));
+    } catch (error) {
+      console.error('Error saving satisfaction responses:', error);
+    }
+  };
+
+  const loadSatisfactionResponses = () => {
+    try {
+      const saved = localStorage.getItem('satisfactionResponses');
+      if (saved) {
+        setSatisfactionResponses(JSON.parse(saved));
+      }
+    } catch (error) {
+      console.error('Error loading satisfaction responses:', error);
+    }
+  };
+
+  // Task response management
+  const addTaskResponse = (response: TaskResponse) => {
+    setTaskResponses(prev => {
+      const updated = [...prev, response];
+      saveTaskResponsesToLocalStorage(updated);
+      return updated;
+    });
+  };
+
+  const getTaskResponses = () => {
+    return taskResponses;
+  };
+
+  const clearTaskResponses = () => {
+    setTaskResponses([]);
+    localStorage.removeItem('taskResponses');
+  };
+
+  const saveTaskResponsesToLocalStorage = (responses: TaskResponse[]) => {
+    try {
+      localStorage.setItem('taskResponses', JSON.stringify(responses));
+    } catch (error) {
+      console.error('Error saving task responses:', error);
+    }
+  };
+
+  const loadTaskResponses = () => {
+    try {
+      const saved = localStorage.getItem('taskResponses');
+      if (saved) {
+        setTaskResponses(JSON.parse(saved));
+      }
+    } catch (error) {
+      console.error('Error loading task responses:', error);
+    }
+  };
+
+  // Final preference management
+  const handleSetFinalPreference = (response: FinalPreferenceResponse) => {
+    setFinalPreference(response);
+    try {
+      localStorage.setItem('finalPreference', JSON.stringify(response));
+      console.log('✅ Final preference saved:', response.preference);
+    } catch (error) {
+      console.error('Error saving final preference:', error);
+    }
+  };
+
+  // Demographics management
+  const handleSetDemographics = (data: DemographicsData) => {
+    setDemographicsState(data);
+    try {
+      localStorage.setItem('demographics', JSON.stringify(data));
+      console.log('✅ Demographics saved:', data);
+    } catch (error) {
+      console.error('Error saving demographics:', error);
+    }
+  };
+
   const value = {
     files,
     chartData,
@@ -711,6 +944,9 @@ const getRandomColor = () => {
     isSingleChartCompatible,
     getHybridChartGroups,
     addFile,
+    addParsedFile,
+    setXAxis,
+    setYAxis,
     removeFile,
     updateAxisSelection,
     updateLineStyle,
@@ -727,8 +963,23 @@ const getRandomColor = () => {
     saveFilesToLocalStorage,
     saveChartOptionsToLocalStorage,
     loadFilesFromLocalStorage,
+    // Experiment-specific state
+    participantId,
+    assignedGroup,
+    demographics,
+    setDemographics: handleSetDemographics,
+    satisfactionResponses,
+    addSatisfactionResponse,
+    getSatisfactionResponses,
+    clearSatisfactionResponses,
+    taskResponses,
+    addTaskResponse,
+    getTaskResponses,
+    clearTaskResponses,
+    finalPreference,
+    setFinalPreference: handleSetFinalPreference,
   };
-  
+
   return (
     <VisualizationContext.Provider value={value}>
       {children}

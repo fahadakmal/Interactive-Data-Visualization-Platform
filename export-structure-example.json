@@ -1,0 +1,163 @@
+{
+  "metadata": {
+    "participantId": "P001",
+    "assignedGroup": "A",
+    "sessionStartTimestamp": "2025-10-05T10:30:00.000Z",
+    "sessionEndTimestamp": "2025-10-05T11:02:15.000Z",
+    "sessionDurationMinutes": 32.3,
+    "browser": "Chrome 118",
+    "screenResolution": "1920x1080",
+    "operatingSystem": "Windows",
+    "exportVersion": "1.0"
+  },
+  "demographics": {
+    "age": 25,
+    "gender": "female",
+    "educationLevel": "master",
+    "fieldOfStudy": "computer science",
+    "dataVisualizationExperience": "intermediate"
+  },
+  "responses": [
+    {
+      "taskId": "T1",
+      "taskNumber": 1,
+      "blockNumber": 1,
+      "layout": "overlay",
+      "question": "Which variable shows the highest day-to-day variability in the January-April period?",
+      "selectedAnswer": "Air Quality Index",
+      "correctAnswer": "Air Quality Index",
+      "isCorrect": true,
+      "completionTime": 15420,
+      "answerChanges": 2,
+      "timeToFirstInteraction": 1834,
+      "pauseCount": 1,
+      "startTimestamp": "2025-10-05T10:35:00.000Z",
+      "endTimestamp": "2025-10-05T10:35:15.420Z"
+    },
+    {
+      "taskId": "T2",
+      "taskNumber": 2,
+      "blockNumber": 1,
+      "layout": "overlay",
+      "question": "Which two variables show an inverse relationship (when one increases, the other decreases)?",
+      "selectedAnswer": "Temperature and Precipitation",
+      "correctAnswer": "Temperature and CO2",
+      "isCorrect": false,
+      "completionTime": 22890,
+      "answerChanges": 4,
+      "timeToFirstInteraction": 3250,
+      "pauseCount": 2,
+      "startTimestamp": "2025-10-05T10:36:00.000Z",
+      "endTimestamp": "2025-10-05T10:36:22.890Z"
+    },
+    {
+      "taskId": "T3",
+      "taskNumber": 3,
+      "blockNumber": 1,
+      "layout": "overlay",
+      "question": "What is the maximum Air Quality Index value recorded in the dataset?",
+      "selectedAnswer": "145",
+      "correctAnswer": "145",
+      "isCorrect": true,
+      "completionTime": 12350,
+      "answerChanges": 0,
+      "timeToFirstInteraction": 1520,
+      "pauseCount": 0,
+      "startTimestamp": "2025-10-05T10:38:00.000Z",
+      "endTimestamp": "2025-10-05T10:38:12.350Z"
+    },
+    {
+      "taskId": "T4",
+      "taskNumber": 4,
+      "blockNumber": 2,
+      "layout": "small-multiples",
+      "question": "Which variable shows the greatest change between January and April?",
+      "selectedAnswer": "Temperature",
+      "correctAnswer": "Temperature",
+      "isCorrect": true,
+      "completionTime": 16780,
+      "answerChanges": 1,
+      "timeToFirstInteraction": 1990,
+      "pauseCount": 0,
+      "startTimestamp": "2025-10-05T10:50:00.000Z",
+      "endTimestamp": "2025-10-05T10:50:16.780Z"
+    },
+    {
+      "taskId": "T5",
+      "taskNumber": 5,
+      "blockNumber": 2,
+      "layout": "small-multiples",
+      "question": "How many days had both high Air Quality Index (>100) AND high precipitation (>20mm)?",
+      "selectedAnswer": "3 days",
+      "correctAnswer": "3 days",
+      "isCorrect": true,
+      "completionTime": 18920,
+      "answerChanges": 2,
+      "timeToFirstInteraction": 2340,
+      "pauseCount": 1,
+      "startTimestamp": "2025-10-05T10:52:00.000Z",
+      "endTimestamp": "2025-10-05T10:52:18.920Z"
+    },
+    {
+      "taskId": "T6",
+      "taskNumber": 6,
+      "blockNumber": 2,
+      "layout": "small-multiples",
+      "question": "Which variables show an overall increasing trend from January to April?",
+      "selectedAnswer": "Temperature and CO2",
+      "correctAnswer": "Temperature and CO2",
+      "isCorrect": true,
+      "completionTime": 14200,
+      "answerChanges": 1,
+      "timeToFirstInteraction": 1680,
+      "pauseCount": 0,
+      "startTimestamp": "2025-10-05T10:54:00.000Z",
+      "endTimestamp": "2025-10-05T10:54:14.200Z"
+    }
+  ],
+  "satisfaction": {
+    "blockRatings": [
+      {
+        "blockNumber": 1,
+        "layout": "overlay",
+        "easeRating": 4,
+        "intentionRating": 3,
+        "timestamp": "2025-10-05T10:48:00.000Z"
+      },
+      {
+        "blockNumber": 2,
+        "layout": "small-multiples",
+        "easeRating": 5,
+        "intentionRating": 4,
+        "timestamp": "2025-10-05T11:00:00.000Z"
+      }
+    ],
+    "finalPreference": "small-multiples",
+    "comments": "Small multiples layout made it easier to compare trends across different variables. The overlay layout was more compact but I found it harder to distinguish individual lines when they crossed. For my work analyzing environmental data, I would prefer the small multiples approach."
+  },
+  "usabilityMetrics": {
+    "overlayAccuracyPercentage": 66.67,
+    "smallMultiplesAccuracyPercentage": 100.0,
+    "overlayMeanCompletionTime": 16886.67,
+    "smallMultiplesMeanCompletionTime": 16633.33,
+    "overlayMeanAnswerChanges": 2.0,
+    "smallMultiplesMeanAnswerChanges": 1.33,
+    "overlayMeanTimeToFirstInteraction": 2201.33,
+    "smallMultiplesMeanTimeToFirstInteraction": 2003.33,
+    "overlayMeanPauseCount": 1.0,
+    "smallMultiplesMeanPauseCount": 0.33,
+    "totalTasksCompleted": 6,
+    "totalCorrect": 5,
+    "totalIncorrect": 1,
+    "overallAccuracyPercentage": 83.33
+  },
+  "cognitiveLoad": {
+    "mentalDemand": 65,
+    "physicalDemand": 10,
+    "temporalDemand": 45,
+    "performance": 80,
+    "effort": 50,
+    "frustration": 25,
+    "compositeScore": 45.83
+  }
+}
