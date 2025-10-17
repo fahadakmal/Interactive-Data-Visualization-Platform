@@ -154,11 +154,15 @@ const TaskPresenter: React.FC<TaskPresenterProps> = ({
       pauseCount,
     };
 
+    // Extract the letter (A, B, C, D) from the selected answer
+    // Selected answer format: "A) Temperature" -> Extract "A"
+    const answerLetter = selectedAnswer?.charAt(0) || null;
+
     const response: TaskResponse = {
       taskId: task.id,
       question: task.question,
       selectedAnswer,
-      isCorrect: selectedAnswer === task.correctAnswer,
+      isCorrect: answerLetter === task.correctAnswer,
       completionTime,
       metrics,
       layout,

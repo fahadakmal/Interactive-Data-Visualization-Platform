@@ -38,15 +38,16 @@ const MultiChartView: React.FC<MultiChartViewProps> = ({ data, options, onBack, 
 
   return (
     <Box>
-      <Grid container spacing={3}>
-        <Grid item xs={12}>
-          {combineAll ? (
+      {combineAll ? (
+        // Combined/Overlay Layout - Full Width
+        <Grid container spacing={3}>
+          <Grid item xs={12}>
             <Box>
-              <Box sx={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
+              <Box sx={{
+                display: 'flex',
+                justifyContent: 'space-between',
                 alignItems: 'center',
-                mb: 2 
+                mb: 2
               }}>
                 <Typography variant="h6">
                   {options.title || 'Combined Chart'}
@@ -92,82 +93,64 @@ const MultiChartView: React.FC<MultiChartViewProps> = ({ data, options, onBack, 
                 />
               </Box>
             </Box>
-          ) : (
-            Object.values(datasetsByFile).map(({ fileId, fileName, datasets }, idx, arr) => {
-              return (
-                <Box key={fileId} sx={{ mb: 4 }}>
-                  <Box sx={{ 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    alignItems: 'center',
-                    mb: 2 
-                  }}>
-                    <Typography variant="h6">
-                      {options.fileConfigs?.[fileId]?.title || `${fileName}`}
-                    </Typography>
-                    <Box>
-                      <Tooltip title="Download as PNG">
-                        <IconButton
-                          aria-label="Download as PNG"
-                          onClick={() => {
-                            const svg = svgRefs.current.get(fileId);
-                            if (svg) {
-                              import('../../utils/downloadUtils').then(utils => {
-                                utils.downloadSvgAsPng(svg, `${fileName}.png`, svg.width.baseVal.value, svg.height.baseVal.value);
-                              });
-                            }
-                          }}
-                        >
-                          <Image />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Download as SVG">
-                        <IconButton
-                          aria-label="Download as SVG"
-                          onClick={() => {
-                            const svg = svgRefs.current.get(fileId);
-                            if (svg) {
-                              import('../../utils/downloadUtils').then(utils => {
-                                utils.downloadSvg(svg, `${fileName}.svg`);
-                              });
-                            }
-                          }}
-                        >
-                          <Download />
-                        </IconButton>
-                      </Tooltip>
-                    </Box>
-                  </Box>
-                  <Box sx={{ width: '100%', height: 650 }}>
-                    <D3LineChart
-                      data={{ datasets }}
-                      options={{
-                        ...options,
-                        ...options.fileConfigs?.[fileId],
-                        title: options.fileConfigs?.[fileId]?.title || `${fileName}`,
-                        axisConfig: {
-                          x: {
-                            ...options.axisConfig.x,
-                            ...options.fileConfigs?.[fileId]?.axisConfig.x,
-                            label: options.fileConfigs?.[fileId]?.axisConfig.x?.label || options.axisConfig.x.label || datasets[0]?.xAxisName || 'X Axis',
-                          },
-                          y: {
-                            ...options.axisConfig.y,
-                            ...options.fileConfigs?.[fileId]?.axisConfig.y,
-                            label: options.fileConfigs?.[fileId]?.axisConfig.y?.label || options.axisConfig.y.label,
-                          },
-                        },
-                      }}
-                      svgRef={setSvgRef(fileId)}
-                    />
-                  </Box>
-                  {idx < arr.length - 1 && <Divider sx={{ my: 4 }} />}
-                </Box>
-              );
-            })
-          )}
+          </Grid>
         </Grid>
-      </Grid>
+      ) : (
+        // Small Multiples Layout - 2x2 Grid
+        <Box
+          sx={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 3,
+          }}
+        >
+          {Object.values(datasetsByFile).map(({ fileId, fileName, datasets }) => (
+            <Box
+              key={fileId}
+              sx={{
+                width: 'calc(50% - 12px)',
+                minHeight: 400,
+                border: '1px solid',
+                borderColor: 'divider',
+                borderRadius: 2,
+                p: 2,
+                boxSizing: 'border-box',
+              }}
+            >
+              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                {options.fileConfigs?.[fileId]?.title || fileName}
+              </Typography>
+              <D3LineChart
+                data={{ datasets }}
+                options={{
+                  ...options,
+                  ...options.fileConfigs?.[fileId],
+                  title: options.fileConfigs?.[fileId]?.title || `${fileName}`,
+                  axisConfig: {
+                    x: {
+                      ...options.axisConfig.x,
+                      ...options.fileConfigs?.[fileId]?.axisConfig.x,
+                      label:
+                        options.fileConfigs?.[fileId]?.axisConfig.x?.label ||
+                        options.axisConfig.x.label ||
+                        datasets[0]?.xAxisName ||
+                        'X Axis',
+                    },
+                    y: {
+                      ...options.axisConfig.y,
+                      ...options.fileConfigs?.[fileId]?.axisConfig.y,
+                      label:
+                        options.fileConfigs?.[fileId]?.axisConfig.y?.label ||
+                        options.axisConfig.y.label,
+                    },
+                  },
+                }}
+                svgRef={setSvgRef(fileId)}
+              />
+            </Box>
+          ))}
+        </Box>
+      )}
     </Box>
   );
 };

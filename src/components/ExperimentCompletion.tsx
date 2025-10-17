@@ -31,6 +31,9 @@ import {
   generateExperimentDataExport,
   downloadExperimentData,
 } from '../utils/experimentDataExport';
+import { EXPERIMENT_TASKS } from '../data/experimentTasks';
+import { saveParticipantData, isFirebaseConfigured } from '../services/firebaseService';
+import { savePSPPData } from '../services/psppDataService';
 
 interface ExperimentCompletionProps {
   onStartNewSession?: () => void;
@@ -60,10 +63,8 @@ const ExperimentCompletion: React.FC<ExperimentCompletionProps> = ({
     assignedGroup,
     demographics,
     getTaskResponses,
-    getSatisfactionResponses,
     finalPreference,
     clearTaskResponses,
-    clearSatisfactionResponses,
     resetChart,
   } = useVisualization();
 
@@ -71,6 +72,73 @@ const ExperimentCompletion: React.FC<ExperimentCompletionProps> = ({
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportSuccess, setExportSuccess] = useState(false);
   const [showResetDialog, setShowResetDialog] = useState(false);
+  const [showDebugInfo, setShowDebugInfo] = useState(false);
+  const [firebaseSyncStatus, setFirebaseSyncStatus] = useState<'pending' | 'success' | 'error' | 'disabled'>('pending');
+  const [firebaseError, setFirebaseError] = useState<string | null>(null);
+
+  // Automatically sync data to Firebase on component mount
+  useEffect(() => {
+    const syncToFirebase = async () => {
+      // Check if Firebase is configured
+      if (!isFirebaseConfigured()) {
+        console.log('⚠️ Firebase not configured - skipping automatic sync');
+        setFirebaseSyncStatus('disabled');
+        return;
+      }
+
+      try {
+        const taskResponses = getTaskResponses();
+
+        // Transform demographics to match export format
+        const demographicsForExport = demographics ? {
+          age: demographics.age,
+          education: demographics.education,
+          chartExperience: demographics.chartExperience,
+          environmentalBackground: demographics.environmentalBackground,
+        } : {
+          age: '',
+          education: '',
+          chartExperience: '',
+          environmentalBackground: ''
+        };
+
+        console.log('📤 Syncing participant data to Firebase...');
+
+        // 1. Save raw data to 'participants' collection (for backup)
+        await saveParticipantData({
+          participantId,
+          assignedGroup,
+          demographics: demographicsForExport,
+          taskResponses,
+          satisfactionResponses: [], // No post-block satisfaction in between-subjects design
+          umuxResponse: finalPreference,
+          finalPreference,
+        });
+
+        // 2. Save PSPP-formatted data to 'psppData' collection (for direct export)
+        await savePSPPData(
+          participantId,
+          assignedGroup,
+          taskResponses,
+          finalPreference,
+          demographicsForExport
+        );
+
+        setFirebaseSyncStatus('success');
+
+        // Set completion flag in localStorage to prevent duplicate participation
+        localStorage.setItem('experimentCompleted', 'true');
+        console.log('✅ Data successfully synced to Firebase (both raw + PSPP format)');
+        console.log('✅ Experiment marked as completed in localStorage');
+      } catch (error) {
+        console.error('❌ Failed to sync data to Firebase:', error);
+        setFirebaseSyncStatus('error');
+        setFirebaseError(error instanceof Error ? error.message : 'Unknown error');
+      }
+    };
+
+    syncToFirebase();
+  }, []); // Run once on mount
 
   const handleDownloadData = async () => {
     setIsExporting(true);
@@ -78,7 +146,6 @@ const ExperimentCompletion: React.FC<ExperimentCompletionProps> = ({
 
     try {
       const taskResponses = getTaskResponses();
-      const satisfactionResponses = getSatisfactionResponses();
 
       // Transform demographics to match export format
       const demographicsForExport = demographics ? {
@@ -92,7 +159,7 @@ const ExperimentCompletion: React.FC<ExperimentCompletionProps> = ({
         participantId,
         assignedGroup,
         taskResponses,
-        satisfactionResponses,
+        [], // No post-block satisfaction in between-subjects design
         finalPreference,
         demographicsForExport
       );
@@ -116,7 +183,6 @@ const ExperimentCompletion: React.FC<ExperimentCompletionProps> = ({
   const confirmReset = () => {
     // Clear all experiment data
     clearTaskResponses();
-    clearSatisfactionResponses();
     resetChart();
 
     // Clear demographics and final preference from localStorage
@@ -132,19 +198,56 @@ const ExperimentCompletion: React.FC<ExperimentCompletionProps> = ({
   };
 
   const taskResponses = getTaskResponses();
-  const satisfactionResponses = getSatisfactionResponses();
 
-  // Calculate summary statistics
-  const tasksCompleted = taskResponses.length;
-  const correctTasks = taskResponses.filter((t) => t.isCorrect).length;
+  // Recalculate isCorrect for existing responses (in case they were saved with the bug)
+  const recalculatedResponses = taskResponses.map(response => {
+    const task = EXPERIMENT_TASKS.find(t => t.id === response.taskId);
+    if (!task) {
+      console.warn('⚠️ Task not found for ID:', response.taskId);
+      return response;
+    }
+
+    // Handle null/undefined selectedAnswer
+    if (!response.selectedAnswer) {
+      console.warn(`⚠️ Task ${response.taskId} has no selected answer`);
+      return { ...response, isCorrect: false };
+    }
+
+    // Extract the letter (A, B, C, D) from the selected answer
+    // selectedAnswer format: "A) Temperature" -> extract "A"
+    const answerLetter = String(response.selectedAnswer).trim().charAt(0).toUpperCase();
+    const correctLetter = String(task.correctAnswer).trim().toUpperCase();
+    const isCorrect = answerLetter === correctLetter;
+
+    console.log(`✅ Task ${response.taskId}: Selected="${response.selectedAnswer}" → Letter="${answerLetter}" vs Correct="${correctLetter}" → ${isCorrect ? '✅ CORRECT' : '❌ WRONG'}`);
+
+    return {
+      ...response,
+      isCorrect
+    };
+  });
+
+  // Debug: Log task responses to understand what's stored
+  console.log('📊 Original Task Responses:', taskResponses);
+  console.log('📊 Recalculated Task Responses:', recalculatedResponses);
+  console.log('📊 Unique Task IDs:', [...new Set(taskResponses.map(t => t.taskId))]);
+  console.log('📊 isCorrect values:', recalculatedResponses.map(t => ({ id: t.taskId, isCorrect: t.isCorrect, answer: t.selectedAnswer })));
+
+  // Calculate summary statistics using recalculated responses
+  // BETWEEN-SUBJECTS DESIGN: Each participant completes 6 tasks with ONE layout only
+  const totalResponses = recalculatedResponses.length;
+  const tasksCompleted = totalResponses;
+  const correctTasks = recalculatedResponses.filter((t) => t.isCorrect).length;
   const accuracyPercentage = tasksCompleted > 0
     ? Math.round((correctTasks / tasksCompleted) * 100)
     : 0;
-  const blocksCompleted = satisfactionResponses.length;
-  const hasPreference = finalPreference?.preference && finalPreference.preference !== 'no-preference';
+  const hasUmuxResponse = finalPreference && Object.keys(finalPreference).length > 0;
 
   // Determine completion status
-  const isFullyComplete = tasksCompleted === 12 && blocksCompleted === 2;
+  // Expected: 6 tasks + UMUX questionnaire (no post-block satisfaction)
+  const uniqueTaskIds = [...new Set(recalculatedResponses.map(t => t.taskId))].length;
+  const expectedTaskCount = 6; // Fixed: 6 tasks total in the experiment
+  const isFullyComplete = tasksCompleted === 6 && hasUmuxResponse;
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -198,8 +301,8 @@ const ExperimentCompletion: React.FC<ExperimentCompletionProps> = ({
                     <Chip
                       label={
                         assignedGroup === 'A'
-                          ? 'Overlay First'
-                          : 'Small Multiples First'
+                          ? 'Overlay Layout'
+                          : 'Small Multiples Layout'
                       }
                       size="small"
                       color="primary"
@@ -224,8 +327,8 @@ const ExperimentCompletion: React.FC<ExperimentCompletionProps> = ({
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Typography variant="body1">Tasks Completed</Typography>
                   <Chip
-                    label={`${tasksCompleted} / 12`}
-                    color={tasksCompleted === 12 ? 'success' : 'warning'}
+                    label={`${tasksCompleted} / ${expectedTaskCount}`}
+                    color={isFullyComplete ? 'success' : 'warning'}
                     sx={{ fontWeight: 'bold' }}
                   />
                 </Box>
@@ -238,26 +341,10 @@ const ExperimentCompletion: React.FC<ExperimentCompletionProps> = ({
                   />
                 </Box>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Typography variant="body1">Blocks Completed</Typography>
+                  <Typography variant="body1">UMUX Questionnaire</Typography>
                   <Chip
-                    label={`${blocksCompleted} / 2`}
-                    color={blocksCompleted === 2 ? 'success' : 'warning'}
-                    sx={{ fontWeight: 'bold' }}
-                  />
-                </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Typography variant="body1">Satisfaction Ratings</Typography>
-                  <Chip
-                    label={blocksCompleted === 2 ? 'Recorded' : 'Incomplete'}
-                    color={blocksCompleted === 2 ? 'success' : 'warning'}
-                    sx={{ fontWeight: 'bold' }}
-                  />
-                </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Typography variant="body1">Final Preference</Typography>
-                  <Chip
-                    label={hasPreference ? 'Recorded' : 'No Preference'}
-                    color={hasPreference ? 'success' : 'default'}
+                    label={hasUmuxResponse ? 'Completed' : 'Incomplete'}
+                    color={hasUmuxResponse ? 'success' : 'warning'}
                     sx={{ fontWeight: 'bold' }}
                   />
                 </Box>
@@ -266,6 +353,57 @@ const ExperimentCompletion: React.FC<ExperimentCompletionProps> = ({
           </Card>
         </Grid>
       </Grid>
+
+      {/* Debug Panel */}
+      <Paper elevation={2} sx={{ p: 3, mb: 3, bgcolor: 'grey.50', borderRadius: 2 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Typography variant="h6" color="primary">Debug Information</Typography>
+          <Button
+            size="small"
+            onClick={() => setShowDebugInfo(!showDebugInfo)}
+            variant="outlined"
+          >
+            {showDebugInfo ? 'Hide' : 'Show'} Debug Info
+          </Button>
+        </Box>
+
+        {showDebugInfo && (
+          <Box sx={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              <strong>Total Responses:</strong> {recalculatedResponses.length}
+            </Typography>
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              <strong>Unique Task IDs:</strong> {uniqueTaskIds}
+            </Typography>
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              <strong>Expected Count:</strong> {expectedTaskCount}
+            </Typography>
+            <Typography variant="body2" sx={{ mb: 2 }}>
+              <strong>Correct Answers:</strong> {correctTasks} / {tasksCompleted} ({accuracyPercentage}%)
+            </Typography>
+
+            <Divider sx={{ my: 2 }} />
+
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>Task Responses:</Typography>
+            {recalculatedResponses.map((r, idx) => (
+              <Box key={idx} sx={{ mb: 1, p: 1, bgcolor: 'white', borderRadius: 1, border: '1px solid #ddd' }}>
+                <Typography variant="caption" display="block">
+                  <strong>Task {r.taskId}:</strong> {r.question.substring(0, 50)}...
+                </Typography>
+                <Typography variant="caption" display="block">
+                  <strong>Selected:</strong> {r.selectedAnswer}
+                </Typography>
+                <Typography variant="caption" display="block">
+                  <strong>Is Correct:</strong> {r.isCorrect ? '✅ YES' : '❌ NO'}
+                </Typography>
+                <Typography variant="caption" display="block" color="text.secondary">
+                  Layout: {r.layout} | Time: {Math.round(r.completionTime / 1000)}s
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+        )}
+      </Paper>
 
       {/* Validation Warning */}
       {!isFullyComplete && (
@@ -276,18 +414,50 @@ const ExperimentCompletion: React.FC<ExperimentCompletionProps> = ({
           <Typography variant="body2">
             Not all experiment phases were completed. The export may be missing data.
           </Typography>
-          {tasksCompleted < 12 && (
+          {tasksCompleted < expectedTaskCount && (
             <Typography variant="body2" sx={{ mt: 1 }}>
-              Expected: 12 tasks (6 per block), but only {tasksCompleted} completed.
+              Expected: {expectedTaskCount} task responses, but only {tasksCompleted} completed.
             </Typography>
           )}
-          {blocksCompleted > 2 && (
-            <Typography variant="body2" sx={{ mt: 1, color: 'error.main' }}>
-              ⚠️ Warning: Detected {blocksCompleted} satisfaction responses (expected 2).
-              This may indicate cached data from a previous session.
-              Click "Start New Session" to clear and begin fresh.
+          {!hasUmuxResponse && (
+            <Typography variant="body2" sx={{ mt: 1 }}>
+              UMUX questionnaire not completed. Please complete all experiment phases.
             </Typography>
           )}
+        </Alert>
+      )}
+
+      {/* Firebase Sync Status */}
+      {firebaseSyncStatus === 'success' && (
+        <Alert severity="success" sx={{ mb: 3 }} icon={<CheckCircleIcon />}>
+          <Typography variant="subtitle2" fontWeight="bold">
+            Data Successfully Synced to Firebase
+          </Typography>
+          <Typography variant="body2">
+            Your responses have been securely saved. Thank you for participating!
+          </Typography>
+        </Alert>
+      )}
+
+      {firebaseSyncStatus === 'error' && firebaseError && (
+        <Alert severity="warning" sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" fontWeight="bold">
+            Firebase Sync Failed
+          </Typography>
+          <Typography variant="body2">
+            Could not sync to Firebase: {firebaseError}. Your data is still saved locally and can be downloaded below.
+          </Typography>
+        </Alert>
+      )}
+
+      {firebaseSyncStatus === 'disabled' && (
+        <Alert severity="info" sx={{ mb: 3 }} icon={<InfoIcon />}>
+          <Typography variant="subtitle2" fontWeight="bold">
+            Firebase Not Configured
+          </Typography>
+          <Typography variant="body2">
+            Cloud sync is disabled. Please configure Firebase in src/config/firebase.ts to enable automatic data backup and counterbalancing.
+          </Typography>
         </Alert>
       )}
 
@@ -416,7 +586,7 @@ const ExperimentCompletion: React.FC<ExperimentCompletionProps> = ({
         <DialogContent>
           <DialogContentText>
             Are you sure you want to start a new session? This will clear all current experiment
-            data including uploaded files, task responses, and satisfaction ratings.
+            data including uploaded files, task responses, and UMUX questionnaire responses.
           </DialogContentText>
           <Alert severity="warning" sx={{ mt: 2 }}>
             Make sure you have downloaded your data before proceeding!

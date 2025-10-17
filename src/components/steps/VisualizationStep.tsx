@@ -379,20 +379,15 @@ const VisualizationStep: React.FC<VisualizationStepProps> = ({ onBack, onReset }
               ))}
             </>
           ) : (
-            // Render one chart per file
-            files.map((file, idx) => (
-              <React.Fragment key={file.id}>
-                <MultiChartView
-                  data={{ datasets: (chartData?.datasets || []).filter(ds => ds.fileId === file.id) }}
-                  options={chartOptions}
-                  onBack={onBack}
-                  onReset={onReset}
-                  combineAll={false}
-                  svgRefs={svgRefs}
-                />
-                {idx < files.length - 1 && <Divider sx={{ my: 4 }} />}
-              </React.Fragment>
-            ))
+            // Render all charts in 2x2 grid
+            <MultiChartView
+              data={chartData}
+              options={chartOptions}
+              onBack={onBack}
+              onReset={onReset}
+              combineAll={false}
+              svgRefs={svgRefs}
+            />
           )
         )}
       </Paper>

@@ -108,14 +108,28 @@ export const EXPERIMENT_TASKS: ExperimentTask[] = [
 ];
 
 /**
- * Get tasks for a specific block based on counterbalancing group
- * Block 1: Tasks 1-3
- * Block 2: Tasks 4-6
+ * Get tasks for a specific block based on experimental design
+ *
+ * Between-subjects design (current):
+ * - blockId="all": All 6 tasks for one layout (Group A gets overlay, Group B gets small multiples)
+ *
+ * Within-subjects design (alternative):
+ * - Block 1: Tasks 1-3
+ * - Block 2: Tasks 4-6
  */
 export function getTasksForBlock(blockId: string): ExperimentTask[] {
-  if (blockId === '1') {
+  if (blockId === 'all') {
+    // Between-subjects: Return all 6 tasks for single layout
+    return EXPERIMENT_TASKS;
+  } else if (blockId === '1') {
+    // Within-subjects Block 1: Tasks 1-3
     return [EXPERIMENT_TASKS[0], EXPERIMENT_TASKS[1], EXPERIMENT_TASKS[2]]; // T1, T2, T3
-  } else {
+  } else if (blockId === '2') {
+    // Within-subjects Block 2: Tasks 4-6
     return [EXPERIMENT_TASKS[3], EXPERIMENT_TASKS[4], EXPERIMENT_TASKS[5]]; // T4, T5, T6
+  } else {
+    // Default: Return all tasks
+    console.warn(`Unknown blockId: ${blockId}, returning all tasks`);
+    return EXPERIMENT_TASKS;
   }
 }

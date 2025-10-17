@@ -13,6 +13,7 @@ import {
 import { parseCSV } from '../utils/csvParser';
 import { FinalPreferenceResponse } from '../components/FinalPreferenceQuestionnaire';
 import { DemographicsData } from '../components/DemographicsForm';
+import { getNextBalancedGroup } from '../services/firebaseService';
 
 interface VisualizationContextType {
   // Existing visualization context
@@ -110,15 +111,82 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
     return newId;
   });
 
-  // Assigned Group - Deterministic counterbalancing based on UUID parity
-  // Chapter 4:209-223 - Group A (even): Overlay first, Group B (odd): Small multiples first
-  const [assignedGroup] = useState<'A' | 'B'>(() => {
+  // Assigned Group - Three-tier priority system:
+  // 1. URL parameter ?group=A or ?group=B (highest priority - manual override)
+  // 2. Firebase counterbalancing (automatic - opposite of last participant)
+  // 3. UUID parity (fallback if Firebase unavailable or no previous participants)
+  const [assignedGroup, setAssignedGroup] = useState<'A' | 'B'>(() => {
+    // Check localStorage first for existing assignment
+    const savedGroup = localStorage.getItem('assignedGroup');
+    if (savedGroup === 'A' || savedGroup === 'B') {
+      console.log('✅ Loaded existing group assignment:', savedGroup);
+      return savedGroup as 'A' | 'B';
+    }
+
+    // Check URL parameters first (manual override)
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlGroup = urlParams.get('group')?.toUpperCase();
+
+    if (urlGroup === 'A' || urlGroup === 'B') {
+      console.log('✅ Participant assigned to Group', urlGroup, '(from URL parameter)');
+      localStorage.setItem('assignedGroup', urlGroup);
+      return urlGroup as 'A' | 'B';
+    }
+
+    // Default to Group A while Firebase loads (will be updated by useEffect)
     const idHash = participantId.split('-')[0];
     const idNumber = parseInt(idHash, 16);
-    const group = (idNumber % 2 === 0) ? 'A' : 'B';
-    console.log('✅ Participant assigned to Group', group, '(UUID parity:', idNumber % 2, ')');
-    return group;
+    const fallbackGroup = (idNumber % 2 === 0) ? 'A' : 'B';
+    console.log('✅ Initial group assignment:', fallbackGroup, '(will attempt Firebase fetch)');
+    return fallbackGroup;
   });
+
+  // Fetch group from Firebase on mount (automatic counterbalancing)
+  useEffect(() => {
+    const fetchGroupFromFirebase = async () => {
+      // Check if group was manually set via URL
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlGroup = urlParams.get('group')?.toUpperCase();
+
+      if (urlGroup === 'A' || urlGroup === 'B') {
+        // URL override - don't fetch from Firebase
+        return;
+      }
+
+      // Check if we already have a saved group assignment
+      const savedGroup = localStorage.getItem('assignedGroup');
+      if (savedGroup === 'A' || savedGroup === 'B') {
+        // Already assigned - don't reassign
+        return;
+      }
+
+      try {
+        console.log('📊 Fetching group assignment from Firebase...');
+        const nextGroup = await getNextBalancedGroup();
+
+        if (nextGroup !== null) {
+          // Firebase returned a group for counterbalancing
+          setAssignedGroup(nextGroup);
+          localStorage.setItem('assignedGroup', nextGroup);
+          console.log('✅ Group assigned via Firebase counterbalancing:', nextGroup);
+        } else {
+          // No previous participants in Firebase - use UUID fallback
+          const idHash = participantId.split('-')[0];
+          const idNumber = parseInt(idHash, 16);
+          const fallbackGroup = (idNumber % 2 === 0) ? 'A' : 'B';
+          setAssignedGroup(fallbackGroup);
+          localStorage.setItem('assignedGroup', fallbackGroup);
+          console.log('✅ No previous participants - using UUID parity:', fallbackGroup);
+        }
+      } catch (error) {
+        console.error('❌ Error fetching group from Firebase, using UUID fallback');
+        // Keep the UUID-based fallback group that was set initially
+        localStorage.setItem('assignedGroup', assignedGroup);
+      }
+    };
+
+    fetchGroupFromFirebase();
+  }, [participantId]); // Only run once on mount
 
   // Final Preference - Stored after both blocks complete
   const [finalPreference, setFinalPreference] = useState<FinalPreferenceResponse | null>(() => {
@@ -127,22 +195,33 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
   });
 
   // Load data from localStorage on application startup
+  // DISABLED for experiment - data is loaded fresh from CSV files in ExperimentDemo
+  // This prevents stale cached data from interfering with the experiment
   useEffect(() => {
-    loadFilesFromLocalStorage();
+    // Only load localStorage data if we're NOT in the experiment flow
+    // Check if we're on the experiment route (you can adjust this check)
+    const isExperimentMode = window.location.pathname.includes('/experiment') ||
+                             window.location.pathname === '/' ||
+                             window.location.pathname === '/index.html';
+
+    if (!isExperimentMode) {
+      // Regular mode - load from localStorage for normal usage
+      loadFilesFromLocalStorage();
+    }
+
+    // Always load responses (needed for experiment tracking)
     loadSatisfactionResponses();
     loadTaskResponses();
   }, []);
   
-  // Always generate chart when files change and there are files
-  useEffect(() => {
-    if (files.length > 0) {
-      generateChart();
-    }
-  }, [files]);
-  
+  // Note: Automatic chart generation disabled for experiment mode
+  // Charts are generated manually after all files and axes are configured
+  // This prevents race conditions where files exist but axes aren't set yet
+
   // Always regenerate chart data when chartDisplayMode changes
   useEffect(() => {
     if (files.length > 0) {
+      console.log('🔄 Chart display mode changed, regenerating chart');
       generateChart();
     }
   }, [chartDisplayMode]);
@@ -190,9 +269,18 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   // Add pre-parsed file (for experimental data loading)
+  // Does NOT save to localStorage - data is loaded fresh from CSV files each time
   const addParsedFile = (name: string, data: any[], columns: string[]) => {
     const defaultXAxis = columns[0] || '';
     const defaultYAxes = columns.length > 1 ? [columns[1]] : [];
+
+    console.log(`🔧 addParsedFile called for "${name}":`, {
+      rows: data.length,
+      columns,
+      defaultXAxis,
+      defaultYAxes,
+      firstRow: data[0]
+    });
 
     const newFile: CSVFile = {
       id: uuidv4(),
@@ -219,12 +307,16 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
 
     setFiles(prev => {
       const newFiles = [...prev, newFile];
-      saveFilesToLocalStorage(newFiles);
+      console.log(`✅ Files array updated. Total files: ${newFiles.length}`);
+      // DO NOT save to localStorage for experiment data
+      // This ensures fresh data is loaded from CSV files each time
+      // saveFilesToLocalStorage(newFiles);
       return newFiles;
     });
   };
 
   // Set X-axis for a file by name
+  // Does NOT save to localStorage for experiment mode
   const setXAxis = (fileName: string, column: string) => {
     setFiles(prev => {
       const newFiles = prev.map(file =>
@@ -238,12 +330,14 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
             }
           : file
       );
-      saveFilesToLocalStorage(newFiles);
+      // Don't save to localStorage for experiment data
+      // saveFilesToLocalStorage(newFiles);
       return newFiles;
     });
   };
 
   // Set Y-axis for a file by name
+  // Does NOT save to localStorage for experiment mode
   const setYAxis = (fileName: string, column: string) => {
     setFiles(prev => {
       const newFiles = prev.map(file =>
@@ -257,7 +351,8 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
             }
           : file
       );
-      saveFilesToLocalStorage(newFiles);
+      // Don't save to localStorage for experiment data
+      // saveFilesToLocalStorage(newFiles);
       return newFiles;
     });
   };
@@ -496,14 +591,27 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
   };
   
   const generateChart = () => {
+    console.log('🎨 generateChart called', { filesCount: files.length });
+
     if (files.length === 0) {
+      console.log('❌ No files, setting chartData to null');
       setChartData(null);
       return;
     }
+
     const datasets: ChartData['datasets'] = [];
     files.forEach(file => {
+      console.log(`📊 Processing file "${file.name}":`, {
+        selected: file.selected,
+        dataRows: file.data?.length,
+        columnStyles: Object.keys(file.columnStyles)
+      });
+
       const { selected, data, columnStyles } = file;
-      if (!selected.xAxis || selected.yAxes.length === 0) return;
+      if (!selected.xAxis || selected.yAxes.length === 0) {
+        console.log(`⚠️ Skipping "${file.name}" - missing axis selection`);
+        return;
+      }
       let isDateXAxis = false;
       for (let row of data) {
         const value = row[selected.xAxis];
@@ -540,6 +648,16 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
           })
           .filter(point => !isNaN(point.x) && !isNaN(point.y))
           .sort((a, b) => a.x - b.x);
+
+        console.log(`  ➡️ Points generated for "${file.name}" - ${yAxis}:`, {
+          pointsCount: points.length,
+          isDateXAxis,
+          isDateYAxis,
+          firstPoint: points[0],
+          lastPoint: points[points.length - 1],
+          hasColumnStyles: !!columnStyles[yAxis]
+        });
+
         let warning = undefined;
         if (points.length > 1 && !isDateYAxis) {
           const yVals = points.map(p => p.y);
@@ -569,12 +687,20 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
             isDateYAxis,
             warning,
           };
+          console.log(`  ✅ Dataset added for "${file.name}" - ${yAxis}`);
           datasets.push(dataset);
+        } else {
+          console.log(`  ⚠️ No points for "${file.name}" - ${yAxis}, skipping dataset`);
         }
       });
     });
+
+    console.log('📈 Total datasets generated:', datasets.length);
+
     if (datasets.length > 0) {
       let finalDatasets = datasets;
+      console.log('🔄 Chart display mode:', chartDisplayMode);
+
       if (chartDisplayMode === 'single') {
         finalDatasets = combineDatasetsByColumnName(datasets);
       } else if (chartDisplayMode === 'hybrid') {
@@ -585,10 +711,13 @@ export const VisualizationProvider: React.FC<{ children: React.ReactNode }> = ({
         const mergedCombinedDatasets = combineDatasetsByColumnName(combinedDatasets);
         finalDatasets = [...mergedCombinedDatasets, ...separateDatasets];
       }
+
+      console.log('✅ Setting chartData with', finalDatasets.length, 'final datasets');
       setChartData({
         datasets: finalDatasets,
       });
     } else {
+      console.log('❌ No datasets generated, setting chartData to null');
       setChartData(null);
     }
   };
@@ -749,7 +878,7 @@ const getRandomColor = () => {
   const loadFilesFromLocalStorage = () => {
     const savedFiles = localStorage.getItem('csvFiles');
     const savedOptions = localStorage.getItem('chartOptions');
-    
+
     if (savedFiles) {
       try {
         const filesMetadata = JSON.parse(savedFiles);
@@ -757,12 +886,18 @@ const getRandomColor = () => {
         const filesWithData = filesMetadata.map((file: any) => {
           const fileData = localStorage.getItem(`csvData_${file.id}`);
           let data = fileData ? JSON.parse(fileData) : [];
+
+          // Ensure selected field exists with defaults
+          const columns = file.columns || [];
+          const defaultXAxis = file.selected?.xAxis || columns[0] || '';
+          const defaultYAxes = file.selected?.yAxes || (columns.length > 1 ? [columns[1]] : []);
+
           // Convert numeric fields and parse dates for xAxis
           data = data.map((row: any) => {
             const newRow: any = { ...row };
             for (const key in newRow) {
               // If this is the xAxis and looks like a date, parse it
-              if (key === file.selected?.xAxis && typeof newRow[key] === 'string' && !isNaN(Date.parse(newRow[key]))) {
+              if (key === defaultXAxis && typeof newRow[key] === 'string' && !isNaN(Date.parse(newRow[key]))) {
                 newRow[key] = new Date(newRow[key]);
               } else if (newRow[key] !== null && newRow[key] !== '' && !isNaN(newRow[key])) {
                 newRow[key] = Number(newRow[key]);
@@ -770,9 +905,29 @@ const getRandomColor = () => {
             }
             return newRow;
           });
+
+          // Ensure columnStyles exists
+          const columnStyles = file.columnStyles || {};
+          columns.forEach((col: string) => {
+            if (!columnStyles[col]) {
+              columnStyles[col] = {
+                color: getRandomColor(),
+                lineStyle: 'solid',
+                pointStyle: 'circle',
+                showPoints: true,
+                showLine: true,
+              };
+            }
+          });
+
           return {
             ...file,
             data,
+            selected: {
+              xAxis: defaultXAxis,
+              yAxes: defaultYAxes,
+            },
+            columnStyles,
           };
         });
         setFiles(filesWithData);
